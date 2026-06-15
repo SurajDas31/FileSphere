@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Moon, Sun } from 'lucide-react';
+import { Search, Moon, Sun, LogOut } from 'lucide-react';
 import Notifications from './Notifications';
 
 const Header = () => {

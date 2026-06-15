@@ -7,8 +7,12 @@ import FileProperties from './components/main/FileProperties';
 import FileViewer from './components/main/FileViewer';
 import Repository from './components/main/Repository';
 import SettingsModal from './components/sidebar/Settings';
+import Login from './components/auth/Login';
+import Signup from './components/auth/Signup';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
   const [activeView, setActiveView] = useState('home');
   const [isRepoExpanded, setIsRepoExpanded] = useState(true);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
@@ -40,6 +44,20 @@ function App() {
     setTimeout(() => setIsResizing(false), 450);
   };
 
+  if (!isAuthenticated) {
+    return authView === 'login' ? (
+      <Login 
+        onLogin={() => setIsAuthenticated(true)} 
+        onSignupClick={() => setAuthView('signup')} 
+      />
+    ) : (
+      <Signup 
+        onSignup={() => setIsAuthenticated(true)} 
+        onBackToLogin={() => setAuthView('login')} 
+      />
+    );
+  }
+
   return (
     <div className="app-container">
       <Header />
@@ -58,6 +76,7 @@ function App() {
                 }
               }} 
               onMenuToggle={(isOpen) => setIsSidebarMenuOpen(isOpen)}
+              onLogout={() => setIsAuthenticated(false)}
             />
           </Allotment.Pane>
 

@@ -5,7 +5,7 @@ import {
   Mail, Calendar, MessageSquare, GitBranch, ClipboardList
 } from 'lucide-react';
 
-const Sidebar = ({ activeView, onViewChange, onMenuToggle }) => {
+const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAppsOpen, setIsAppsOpen] = useState(false);
   const [hasImageError, setHasImageError] = useState(false);
@@ -132,7 +132,7 @@ const Sidebar = ({ activeView, onViewChange, onMenuToggle }) => {
                 <span>My Profile</span>
               </div>
               <div className="menu-divider"></div>
-              <div className="menu-item logout">
+              <div className="menu-item logout" onClick={onLogout}>
                 <LogOut size={16} />
                 <span>Log Out</span>
               </div>
