@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.4);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-glow: 0 0 15px rgba(255, 255, 255, 0.1);
+  --glass-blur: blur(20px);
+  --text-main: #1a1a1a;
+  --text-muted: #555555;
+  --accent: #3498db;
+  --overlay: rgba(255, 255, 255, 0.2);
+  --solid-bg: #ffffff;
+}
+
+body.dark-mode {
+  --glass-bg: rgba(0, 0, 0, 0.4);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-glow: 0 0 20px rgba(0, 0, 0, 0.5);
+  --text-main: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --solid-bg: #1e1e1e;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-image: url('./assets/background.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  color: var(--text-main);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--overlay);
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-glow), 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+}
+
+.solid-panel {
+  background: var(--solid-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+}
+
+.allotment-container {
+  height: 100%;
+}
+
+/* Allotment overrides for transparency */
+.sash {
+  background-color: transparent !important;
+}
+
+.sash:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
