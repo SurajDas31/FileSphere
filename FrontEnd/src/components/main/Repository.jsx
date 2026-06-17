@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { FolderPlus, FilePlus, Edit, Trash, FolderOpen } from 'lucide-react';
 import ContextMenu from './ContextMenu';
 
-const Repository = ({ onCollapse }) => {
+const Repository = ({ onCollapse, onFolderSelect, selectedFolderId }) => {
   const [repositories] = useState([
     {
       id: 'default',
@@ -20,7 +20,7 @@ const Repository = ({ onCollapse }) => {
               type: 'folder',
               locked: false,
               children: [
-                { id: 'resume', label: 'Resume', type: 'folder', selected: true },
+                { id: 'resume', label: 'Resume', type: 'folder'},
               ]
             },
             { id: 'regard', label: 'Regard', type: 'folder' },
@@ -37,7 +37,11 @@ const Repository = ({ onCollapse }) => {
         <button className="collapse-btn" onClick={onCollapse}>«</button>
       </div>
       <div className="tree-container">
-        <RepoTree data={repositories} />
+        <RepoTree 
+          data={repositories} 
+          onFolderSelect={onFolderSelect}
+          selectedFolderId={selectedFolderId}
+        />
       </div>
       <style dangerouslySetInnerHTML={{ __html: `
         .repositories-section {
@@ -79,18 +83,27 @@ const Repository = ({ onCollapse }) => {
   );
 };
 
-const RepoTree = ({ data }) => {
+const RepoTree = ({ data, onFolderSelect, selectedFolderId }) => {
   return (
     <div className="repo-tree">
-      {data.map(node => <TreeNode key={node.id} node={node} depth={0} />)}
+      {data.map(node => (
+        <TreeNode 
+          key={node.id} 
+          node={node} 
+          depth={0} 
+          onFolderSelect={onFolderSelect}
+          selectedFolderId={selectedFolderId}
+        />
+      ))}
     </div>
   );
 };
 
-const TreeNode = ({ node, depth }) => {
-  const [isOpen, setIsOpen] = useState(true);
+const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const hasChildren = node.children && node.children.length > 0;
+  const isSelected = selectedFolderId === node.id;
 
   const handleContextMenu = (e) => {
     e.preventDefault();
@@ -118,11 +131,16 @@ const TreeNode = ({ node, depth }) => {
   return (
     <div className="tree-node" style={{ marginLeft: depth * 15 }}>
       <div 
-        className={`tree-row ${node.selected ? 'selected' : ''}`}
+        className={`tree-row ${isSelected ? 'selected' : ''}`}
         onContextMenu={handleContextMenu}
+        onClick={() => onFolderSelect(node.id)}
+        onDoubleClick={() => hasChildren && setIsOpen(!isOpen)}
       >
         {hasChildren ? (
-          <span className="toggle" onClick={() => setIsOpen(!isOpen)}>
+          <span className="toggle" onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}>
             {isOpen ? '⌄' : '›'}
           </span>
         ) : <span className="toggle-spacer" />}
@@ -135,7 +153,13 @@ const TreeNode = ({ node, depth }) => {
       {isOpen && hasChildren && (
         <div className="node-children">
           {node.children.map(child => (
-            <TreeNode key={child.id} node={child} depth={depth + 1} />
+            <TreeNode 
+              key={child.id} 
+              node={child} 
+              depth={depth + 1} 
+              onFolderSelect={onFolderSelect}
+              selectedFolderId={selectedFolderId}
+            />
           ))}
         </div>
       )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Lock, User, Mail, UserPlus, ArrowLeft } from 'lucide-react';
 
 const Signup = ({ onSignup, onBackToLogin }) => {

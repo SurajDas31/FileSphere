@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Home, Database, Users, Pin, Clock, Settings, 
-  LayoutGrid, User, UserCircle, LogOut, Moon, Sun,
+  LayoutGrid, User, UserCircle, LogOut,
   Mail, Calendar, MessageSquare, GitBranch, ClipboardList
 } from 'lucide-react';
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, FileText, Share2, Info, CheckCircle } from 'lucide-react';
 
 const Notifications = () => {

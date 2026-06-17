@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Lock, User, LogIn } from 'lucide-react';
 
 const Login = ({ onLogin, onSignupClick }) => {
@@ -9,7 +9,7 @@ const Login = ({ onLogin, onSignupClick }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     // Dummy credentials
-    if (username === 'admin' && password === 'password123') {
+    if (username === 'admin' && password === 'admin') {
       onLogin();
     } else {
       setError('Invalid username or password');
@@ -70,7 +70,7 @@ const Login = ({ onLogin, onSignupClick }) => {
 
         <div className="login-footer">
           <p>Don't have an account? <button onClick={onSignupClick} className="signup-link">Sign up</button></p>
-          <div className="demo-credentials">Demo: admin / password123</div>
+          <div className="demo-credentials">Demo: admin / admin</div>
         </div>
       </div>
 

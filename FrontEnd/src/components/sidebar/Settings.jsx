@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Settings, User, Bell, Shield, Database, Monitor, Globe, HelpCircle } from 'lucide-react';
 
 const SettingsModal = ({ isOpen, onClose }) => {

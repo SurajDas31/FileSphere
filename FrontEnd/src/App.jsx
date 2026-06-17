@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Allotment } from 'allotment';
 import Header from './components/headerbar/Header';
 import Sidebar from './components/sidebar/Sidebar';
@@ -19,23 +19,31 @@ function App() {
   const [isResizing, setIsResizing] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
   
-  const [documents, setDocuments] = useState([
-    { id: 1, title: 'Thor - Resume', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:02', type: 'pdf', isPrivate: true },
-    { id: 2, title: 'Steve - Resume', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:02', type: 'pdf' },
-    { id: 3, title: 'Tony - Resume', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'word' },
-    { id: 4, title: 'Bruce - Resume', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'image' },
-    { id: 5, title: 'Hank - Resume', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'excel' },
-    { id: 6, title: 'Generia - Documents.ot', tags: 'none', owner: 'Admin', dateModified: '19/04/2021 11:04', type: 'zip' },
-    { id: 7, title: 'Regart - Resume', tags: 'docc', owner: 'Admin', dateModified: '19/04/2021 11:45', type: 'pdf' },
+  const [documents] = useState([
+    { id: 1, folderId: 'thor', title: 'Thor - Resume.pdf', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:02', type: 'pdf', isPrivate: true, url: 'https://pdfobject.com/pdf/sample.pdf' },
+    { id: 2, folderId: 'thor', title: 'Steve - Resume.pdf', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:02', type: 'pdf', url: '/api/proxy/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf' },
+    { id: 3, folderId: 'marvel', title: 'Tony - Resume.docx', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'word', url: 'https://calibre-ebook.com/downloads/demos/demo.docx' },
+    { id: 4, folderId: 'marvel', title: 'Bruce - Profile.jpg', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'image', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRcB3htu1qaYdt1pFuoil_aMFr79tyLtmJU7A&s' },
+    { id: 5, folderId: 'marvel', title: 'Hank - Data.xlsx', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'excel', url: 'https://go.microsoft.com/fwlink/?LinkID=521962' },
+    { id: 6, folderId: 'regard', title: 'Generia - Documents.zip', tags: 'none', owner: 'Admin', dateModified: '19/04/2021 11:04', type: 'zip', url: 'https://www.learningcontainer.com/download/sample-zip-files/?wpdmdl=1637&refresh=6a32876639eed1781696358' },
+    { id: 7, folderId: 'thor', title: 'Regart - Resume.pdf', tags: 'docc', owner: 'Admin', dateModified: '19/04/2021 11:45', type: 'pdf', url: 'https://www.adobe.com/support/products/enterprise/knowledgecenter/media/c4611_sample_explain.pdf' },
+    { id: 8, folderId: 'regard', title: 'Notes - Readme.txt', tags: 'info', owner: 'Admin', dateModified: '20/04/2021 09:15', type: 'text', url: 'https://sample-files.com/downloads/documents/txt/long-doc.txt' },
   ]);
 
-  const [selectedDocId, setSelectedDocId] = useState(2); // Default selection
+  const [selectedDocId, setSelectedDocId] = useState(null); // No default selection
 
   const activeDoc = documents.find(d => d.id === selectedDocId);
+  const filteredDocs = documents.filter(d => d.folderId === selectedFolderId);
 
   const handleDocClick = (id) => {
     setSelectedDocId(selectedDocId === id ? null : id);
+  };
+
+  const handleFolderSelect = (folderId) => {
+    setSelectedFolderId(folderId);
+    setSelectedDocId(null);
   };
 
   const handleTogglePreview = () => {
@@ -86,7 +94,11 @@ function App() {
               <div key={activeView} className="view-transition-wrapper h-full">
                 <Allotment vertical>
                   <Allotment.Pane preferredSize="60%">
-                    <Repository onCollapse={() => setIsRepoExpanded(false)} />
+                    <Repository 
+                      onCollapse={() => setIsRepoExpanded(false)} 
+                      onFolderSelect={handleFolderSelect}
+                      selectedFolderId={selectedFolderId}
+                    />
                   </Allotment.Pane>
                   <Allotment.Pane>
                     <FileProperties data={activeDoc || {}} />
@@ -103,7 +115,7 @@ function App() {
                 <Allotment>
                   <Allotment.Pane preferredSize="60%">
                     <FileList 
-                      data={documents} 
+                      data={filteredDocs} 
                       selectedId={selectedDocId}
                       onDocClick={handleDocClick}
                       isPreviewVisible={isPreviewVisible} 

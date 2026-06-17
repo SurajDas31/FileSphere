@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Moon, Sun, LogOut } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Moon, Sun } from 'lucide-react';
 import Notifications from './Notifications';
 
 const Header = () => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => 
+    document.body.classList.contains('dark-mode')
+  );
 
   const toggleDarkMode = () => {
     const newValue = !isDarkMode;
@@ -14,12 +16,6 @@ const Header = () => {
       document.body.classList.remove('dark-mode');
     }
   };
-
-  useEffect(() => {
-    if (document.body.classList.contains('dark-mode')) {
-      setIsDarkMode(true);
-    }
-  }, []);
 
   return (
     <div className="header glass-panel">

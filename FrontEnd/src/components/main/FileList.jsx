@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronDown, Filter, MoreHorizontal, FileText, CheckCircle2, Edit, Copy, Trash, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, FileText, Edit, Copy, Trash, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import ContextMenu from './ContextMenu';
 
 const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreviewVisible }) => {
@@ -58,7 +58,7 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
             </tr>
           </thead>
           <tbody>
-            {data.map(doc => (
+            {data.length > 0 ? data.map(doc => (
               <tr 
                 key={doc.id} 
                 className={selectedId === doc.id ? 'selected' : ''}
@@ -69,7 +69,7 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
                 <td className="title-cell">
                   <div className="title-cell-content">
                     <div className={`doc-icon ${doc.type}`}>
-                      {doc.type === 'pdf' ? 'PDF' : doc.type === 'word' ? 'DOC' : doc.type === 'image' ? 'IMG' : doc.type === 'excel' ? 'XLS' : 'ZIP'}
+                      {doc.type === 'pdf' ? 'PDF' : doc.type === 'word' ? 'DOC' : doc.type === 'image' ? 'IMG' : doc.type === 'excel' ? 'XLS' : doc.type === 'zip' ? 'ZIP' : 'TXT'}
                     </div>
                     <span className="doc-title">{doc.title}</span>
                     {doc.isPrivate && <span className="private-tag">private</span>}
@@ -79,7 +79,16 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
                 <td>{doc.owner}</td>
                 <td>{doc.dateModified}</td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan="5" className="empty-list-cell">
+                  <div className="empty-list-content">
+                    <FileText size={40} strokeWidth={1} />
+                    <p>No files found in this folder</p>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -199,6 +208,23 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
         .doc-table tr.selected {
           background: rgba(52, 152, 219, 0.15);
         }
+        .empty-list-cell {
+          height: 300px !important;
+          text-align: center;
+          border: none !important;
+        }
+        .empty-list-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 15px;
+          color: var(--text-muted);
+          opacity: 0.5;
+        }
+        .empty-list-content p {
+          font-size: 14px;
+        }
         .title-cell-content {
           display: flex;
           align-items: center;
@@ -222,6 +248,7 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
         .doc-icon.image { background: #f1c40f; }
         .doc-icon.excel { background: #2ecc71; }
         .doc-icon.zip { background: #9b59b6; }
+        .doc-icon.text { background: #7f8c8d; }
         
         .private-tag {
           background: #34495e;
