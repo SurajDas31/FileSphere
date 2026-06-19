@@ -1,5 +1,4 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import DocViewer, { DocViewerRenderers } from "@cyntler/react-doc-viewer";
 import * as zip from "@zip.js/zip.js";
 import { renderAsync } from 'docx-preview';
 import * as XLSX from 'xlsx';
@@ -14,6 +13,20 @@ import {
   Archive,
   ImageIcon
 } from 'lucide-react';
+import { config } from '../../config';
+
+const getFileType = (filename) => {
+  if (!filename) return 'unknown';
+  const ext = filename.split('.').pop().toLowerCase();
+  if (['pdf'].includes(ext)) return 'pdf';
+  if (['doc', 'docx'].includes(ext)) return 'word';
+  if (['xls', 'xlsx'].includes(ext)) return 'excel';
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
+  if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) return 'video';
+  if (['zip', 'rar'].includes(ext)) return 'zip';
+  if (['txt', 'md', 'csv'].includes(ext)) return 'text';
+  return 'unknown';
+};
 
 const FileViewer = ({ data }) => {
   const viewerRef = useRef(null);
@@ -28,6 +41,21 @@ const FileViewer = ({ data }) => {
   const [textContent, setTextContent] = useState(null);
   const [loadingText, setLoadingText] = useState(false);
   const [textError, setTextError] = useState(null);
+
+  useEffect(() => {
+    const fileId = data?.id;
+    const fileTitle = data?.title;
+    if (fileId && fileTitle && getFileType(fileTitle) === 'video') {
+      return () => {
+        fetch(`${config.API_BASE_URL}/api/files/${fileId}/preview`, {
+          method: 'DELETE',
+          keepalive: true
+        }).catch(err => {
+          console.error("Failed to delete temp video preview file:", err);
+        });
+      };
+    }
+  }, [data]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -50,14 +78,7 @@ const FileViewer = ({ data }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   };
 
-  const getFileType = (filename) => {
-    const ext = filename.split('.').pop().toLowerCase();
-    if (['pdf'].includes(ext)) return 'pdf';
-    if (['doc', 'docx'].includes(ext)) return 'word';
-    if (['xls', 'xlsx'].includes(ext)) return 'excel';
-    if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) return 'image';
-    return 'text';
-  };
+  // getFileType is now defined globally
 
   const loadZipContents = useCallback(async (url) => {
     setLoadingZip(true);
@@ -143,11 +164,12 @@ const FileViewer = ({ data }) => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (data?.type === 'zip' && data.url) {
+      const resolvedType = data?.type && data.type !== 'unknown' ? data.type : getFileType(data?.title);
+      if (resolvedType === 'zip' && data.url) {
         loadZipContents(data.url);
-      } else if ((data?.type === 'word' || data?.type === 'excel') && data.url) {
-        loadOfficeDoc(data.url, data.type);
-      } else if (data?.type === 'text' && data.url) {
+      } else if ((resolvedType === 'word' || resolvedType === 'excel') && data.url) {
+        loadOfficeDoc(data.url, resolvedType);
+      } else if (resolvedType === 'text' && data.url) {
         loadTextContent(data.url);
       } else {
         setZipContents([]);
@@ -161,6 +183,52 @@ const FileViewer = ({ data }) => {
     
     return () => clearTimeout(timer);
   }, [data, loadZipContents, loadOfficeDoc, loadTextContent]);
+
+  const handleDownload = () => {
+    if (!data || !data.id) return;
+    
+    // The backend provides a specific endpoint that forces a download attachment
+    // We can trigger this by creating a temporary anchor element
+    const downloadUrl = `${config.API_BASE_URL}/api/files/${data.id}/download`;
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = data.title; // Provide a fallback filename
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handlePrint = () => {
+    if (!data || !data.url) return;
+
+    // For printing, we open the file content in a hidden iframe and call print()
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    iframe.src = data.url;
+
+    document.body.appendChild(iframe);
+
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        // Clean up after print dialog closes (approximate)
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      } catch (e) {
+        console.error("Print failed, possibly blocked by browser security.", e);
+        // Fallback: open in new tab and ask user to print
+        window.open(data.url, '_blank');
+        document.body.removeChild(iframe);
+      }
+    };
+  };
 
   if (!data) {
     return (
@@ -206,42 +274,12 @@ const FileViewer = ({ data }) => {
     );
   }
 
+  const resolvedType = data?.type && data.type !== 'unknown' ? data.type : getFileType(data?.title);
+
   const renderPreviewContent = () => {
     // PDF is now handled by PdfViewer
-    if (data.type === 'pdf' && data.url) {
+    if (resolvedType === 'pdf' && data.url) {
       return <PdfViewer key={data.id} url={data.url} />;
-    }
-
-    // Only use DocViewer for Images. Text is handled natively.
-    const isDocViewerSupported = ['image'].includes(data.type);
-
-    if (isDocViewerSupported && data.url) {
-      const docs = [{ uri: data.url, fileName: data.title }];
-      return (
-        <div className="doc-viewer-wrapper" style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <DocViewer 
-            documents={docs} 
-            pluginRenderers={DocViewerRenderers}
-            theme={{
-              primary: "#3498db",
-              secondary: "#ffffff",
-              tertiary: "#f5f5f5",
-              textPrimary: "#2c3e50",
-              textSecondary: "#7f8c8d",
-              textTertiary: "#bdc3c7",
-              disableThemeScrollbar: true,
-            }}
-            config={{
-              header: {
-                disableHeader: true,
-                disableFileName: true,
-                retainURLParams: false,
-              },
-            }}
-            style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          />
-        </div>
-      );
     }
 
     if (loadingOffice || loadingText) {
@@ -252,7 +290,21 @@ const FileViewer = ({ data }) => {
       return <div className="error-state">{officeError || textError}</div>;
     }
 
-    switch (data.type) {
+    switch (resolvedType) {
+      case 'image':
+        return (
+          <div className="image-preview-wrapper" style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <img src={data.url} alt={data.title} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="video-preview-wrapper" style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', background: 'var(--solid-bg)' }}>
+            <video controls src={data.url} style={{ maxWidth: '100%', maxHeight: '100%' }}>
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        );
       case 'text':
         return (
           <div className="text-preview-wrapper">
@@ -298,13 +350,18 @@ const FileViewer = ({ data }) => {
               ) : zipContents.length > 0 ? (
                 zipContents.map((file, index) => (
                   <div key={index} className="zip-item">
-                    <div className={`zip-icon \${file.type}`}>
-                      {file.type === 'pdf' && <FileText size={16} color="#e74c3c" />}
-                      {file.type === 'word' && <FileText size={16} color="#3498db" />}
-                      {file.type === 'excel' && <FileText size={16} color="#2ecc71" />}
-                      {file.type === 'image' && <ImageIcon size={16} color="#f1c40f" />}
-                      {file.type === 'text' && <FileText size={16} color="#95a5a6" />}
-                    </div>
+                    {file.isDirectory ? (
+                      <div className="zip-icon folder-icon">📁</div>
+                    ) : (
+                      <div className={`zip-icon ${file.type}`}>
+                        {file.type === 'pdf' && <FileText size={16} color="#e74c3c" />}
+                        {file.type === 'word' && <FileText size={16} color="#3498db" />}
+                        {file.type === 'excel' && <FileText size={16} color="#2ecc71" />}
+                        {file.type === 'image' && <ImageIcon size={16} color="#f1c40f" />}
+                        {file.type === 'text' && <FileText size={16} color="#95a5a6" />}
+                        {file.type === 'video' && <FileText size={16} color="#e67e22" />}
+                      </div>
+                    )}
                     <span className="zip-name">{file.name}</span>
                     <span className="zip-size">{file.isDirectory ? 'Directory' : file.size}</span>
                   </div>
@@ -328,15 +385,15 @@ const FileViewer = ({ data }) => {
   };
 
   return (
-    <div ref={viewerRef} className={`document-viewer solid-panel \${isFullscreen ? 'fullscreen' : ''}`}>
+    <div ref={viewerRef} className={`document-viewer solid-panel ${isFullscreen ? 'fullscreen' : ''}`}>
       <div className="viewer-header">
         <div className="header-left">
           <span className="viewer-title">{data.title}</span>
-          <div className={`doc-tag \${data.type}`}>{data.type.toUpperCase()}</div>
+          <div className={`doc-tag ${resolvedType}`}>{resolvedType.toUpperCase()}</div>
         </div>
         <div className="header-actions">
-          <button className="action-btn" title="Download"><Download size={18} /></button>
-          <button className="action-btn" title="Print"><Printer size={18} /></button>
+          <button className="action-btn" onClick={handleDownload} title="Download"><Download size={18} /></button>
+          <button className="action-btn" onClick={handlePrint} title="Print"><Printer size={18} /></button>
           <button className="action-btn" onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
             {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
@@ -396,6 +453,7 @@ const FileViewer = ({ data }) => {
         .doc-tag.image { background: #f1c40f; }
         .doc-tag.excel { background: #2ecc71; }
         .doc-tag.zip { background: #9b59b6; }
+        .doc-tag.video { background: #e67e22; }
 
         .header-actions {
           display: flex;
@@ -497,11 +555,16 @@ const FileViewer = ({ data }) => {
           align-items: center;
           justify-content: center;
         }
+        .zip-icon.folder-icon { 
+          font-size: 16px;
+          filter: sepia(1) hue-rotate(-50deg) saturate(3) brightness(1.2);
+        }
         .zip-icon.pdf { background: #e74c3c22; border: 1px solid #e74c3c44; }
         .zip-icon.image { background: #f1c40f22; border: 1px solid #f1c40f44; }
         .zip-icon.excel { background: #2ecc7122; border: 1px solid #2ecc7144; }
         .zip-icon.word { background: #3498db22; border: 1px solid #3498db44; }
         .zip-icon.text { background: #95a5a622; border: 1px solid #95a5a644; }
+        .zip-icon.video { background: #e67e2222; border: 1px solid #e67e2244; }
         .zip-name { flex: 1; font-size: 13px; }
         .zip-size { font-size: 11px; color: var(--text-muted); }
 

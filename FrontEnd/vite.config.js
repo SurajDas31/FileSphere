@@ -16,12 +16,16 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Create a proxy for external file fetching to bypass CORS
       '/api/proxy': {
         target: 'https://raw.githubusercontent.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/proxy/, ''),
         secure: false,
+      },
+      // Proxy all other /api calls to the Go backend
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
       }
     }
   }

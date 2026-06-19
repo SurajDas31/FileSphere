@@ -5,10 +5,11 @@ FileSphere is a modern, web-based file management interface featuring a sophisti
 ## Project Structure
 
 - **FrontEnd/**: A React application built with Vite. It contains all the UI logic, components, and styles.
-- **BackEnd/**: Currently an empty directory, intended for future server-side implementation (API, storage management, etc.).
+- **BackEnd/**: A containerized Go service that handles folder structures, metadata storage, secure chunked uploads, compression, and end-to-end file encryption.
 
-## Technologies (FrontEnd)
+## Technologies
 
+### FrontEnd
 - **Framework**: React 19
 - **Build Tool**: Vite 8
 - **UI Components**:
@@ -17,13 +18,23 @@ FileSphere is a modern, web-based file management interface featuring a sophisti
 - **Styling**: Vanilla CSS with a focus on Glassmorphism (backdrop-filters, transparency, and glowing borders).
 - **Icons**: SVG-based icons from Lucide.
 
+### BackEnd
+- **Language**: Go 1.21+
+- **Web Framework**: Gin-Gonic 1.9+
+- **ORM**: GORM 1.25+
+- **Database**: PostgreSQL 15 (Docker)
+- **Encryption**: AES-CTR (AES cipher block in Counter Mode)
+- **Compression**: gzip compression for physical storage optimization
+
 ## Key Features
 
 - **Split-Pane Workspace**: Resizable panes for the repository tree, file list, and file viewer.
 - **Repository Tree**: Hierarchical view of folders and files with state management for expansion and selection.
 - **Document List**: Detailed view of files with metadata (Owner, Date Modified, Tags, Type).
-- **File Preview**: A dedicated viewer for different file types.
-- **Context Menus**: Custom right-click menus for file and folder operations.
+- **File Preview**: A dedicated viewer for different file types (PDFs, Word documents, Excel sheets, images, videos, and text files). It also supports previewing contents of ZIP archives.
+- **Context Menus**: Custom right-click menus for folder and file operations.
+- **Resumable Chunked Uploads**: Client-side slicing of large files into chunks with parallel upload, pause, resume, and backend chunk consolidation.
+- **End-to-End Cryptographic Storage**: Auto-compression (gzip) and AES-CTR encryption on upload, with on-the-fly decryption and decompression during streaming or downloading.
 - **Dark Mode Support**: Built-in variables for switching between light and dark themes.
 
 ## Building and Running
@@ -55,7 +66,25 @@ All commands should be run from the `FrontEnd` directory.
 
 ### BackEnd
 
-- **TODO**: Implement the backend service. Currently, this directory is empty.
+All commands should be run from the `BackEnd` directory.
+
+- **Start Services (Database & API)**:
+  ```bash
+  docker compose up -d
+  ```
+- **Stop Services**:
+  ```bash
+  docker compose down
+  ```
+- **View API Logs**:
+  ```bash
+  docker compose logs -f api
+  ```
+- **Run API Server Locally (for development)**:
+  Make sure database is running, then run in the `BackEnd/file-managed-service` directory:
+  ```bash
+  go run main.go
+  ```
 
 ## Development Conventions
 
@@ -68,7 +97,6 @@ All commands should be run from the `FrontEnd` directory.
 
 ## Future Roadmap
 
-- Implement the `BackEnd` API for real file system interaction.
-- Add support for file uploads and downloads.
-- Enhance the `FileViewer` to support more file types (PDF, Office docs, etc.).
-- Integrate authentication and user-specific document owners.
+- Integrate multi-user authentication (session/JWT tokens) and user-specific document owners.
+- Implement file-sharing options (e.g., generating public access tokens).
+- Optimize the chunked upload manager to support parallel chunk transfers.

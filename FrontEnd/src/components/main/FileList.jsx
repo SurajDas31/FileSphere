@@ -1,9 +1,24 @@
-import { useState } from 'react';
-import { ChevronDown, FileText, Edit, Copy, Trash, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { ChevronDown, ChevronUp, FileText, Edit, Copy, Trash, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import ContextMenu from './ContextMenu';
 
-const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreviewVisible }) => {
+const getFileType = (filename, type) => {
+  if (type && type !== 'unknown') return type;
+  if (!filename) return 'unknown';
+  const ext = filename.split('.').pop().toLowerCase();
+  if (['pdf'].includes(ext)) return 'pdf';
+  if (['doc', 'docx'].includes(ext)) return 'word';
+  if (['xls', 'xlsx'].includes(ext)) return 'excel';
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
+  if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) return 'video';
+  if (['zip', 'rar'].includes(ext)) return 'zip';
+  if (['txt', 'md', 'csv'].includes(ext)) return 'text';
+  return 'unknown';
+};
+
+const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreviewVisible, isLoading }) => {
   const [contextMenu, setContextMenu] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   const handleContextMenu = (e, doc) => {
     e.preventDefault();
@@ -18,6 +33,48 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
         { label: 'Delete', icon: <Trash size={14} />, onClick: () => console.log('Delete', doc.title) },
       ]
     });
+  };
+
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedData = useMemo(() => {
+    let sortableItems = [...data];
+    if (sortConfig.key !== null) {
+      sortableItems.sort((a, b) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+        
+        // Handle date sorting properly
+        if (sortConfig.key === 'dateModified') {
+           // Basic string compare for local date string, for robustness you'd parse real dates
+           // but since our dateModified is "DD/MM/YYYY" string, we'll just fall back to string compare
+        }
+
+        if (aVal < bVal) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aVal > bVal) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [data, sortConfig]);
+
+  const getSortIcon = (columnName) => {
+    if (sortConfig.key !== columnName) {
+      return <ChevronDown size={14} style={{ display: 'inline', verticalAlign: 'middle', opacity: 0.3 }} />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUp size={14} style={{ display: 'inline', verticalAlign: 'middle', color: 'var(--accent)' }} /> 
+      : <ChevronDown size={14} style={{ display: 'inline', verticalAlign: 'middle', color: 'var(--accent)' }} />;
   };
 
   return (
@@ -47,50 +104,67 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
       </div>
 
       <div className="table-container">
-        <table className="doc-table">
-          <thead>
-            <tr>
-              <th style={{ width: '40px' }}><input type="checkbox" /></th>
-              <th>Title <ChevronDown size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /></th>
-              <th style={{ width: '100px' }}>Tags</th>
-              <th style={{ width: '100px' }}>Owner</th>
-              <th style={{ width: '160px' }}>Date modified <ChevronDown size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /></th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.length > 0 ? data.map(doc => (
-              <tr 
-                key={doc.id} 
-                className={selectedId === doc.id ? 'selected' : ''}
-                onClick={() => onDocClick(doc.id)}
-                onContextMenu={(e) => handleContextMenu(e, doc)}
-              >
-                <td><input type="checkbox" checked={selectedId === doc.id} readOnly /></td>
-                <td className="title-cell">
-                  <div className="title-cell-content">
-                    <div className={`doc-icon ${doc.type}`}>
-                      {doc.type === 'pdf' ? 'PDF' : doc.type === 'word' ? 'DOC' : doc.type === 'image' ? 'IMG' : doc.type === 'excel' ? 'XLS' : doc.type === 'zip' ? 'ZIP' : 'TXT'}
-                    </div>
-                    <span className="doc-title">{doc.title}</span>
-                    {doc.isPrivate && <span className="private-tag">private</span>}
-                  </div>
-                </td>
-                <td><span className="tag-pill">{doc.tags}</span></td>
-                <td>{doc.owner}</td>
-                <td>{doc.dateModified}</td>
-              </tr>
-            )) : (
+        {isLoading ? (
+          <div className="loading-state">
+            <p>Loading files...</p>
+          </div>
+        ) : (
+          <table className={`doc-table ${sortedData.length === 0 ? 'empty' : ''}`}>
+            <thead>
               <tr>
-                <td colSpan="5" className="empty-list-cell">
-                  <div className="empty-list-content">
-                    <FileText size={40} strokeWidth={1} />
-                    <p>No files found in this folder</p>
-                  </div>
-                </td>
+                <th style={{ width: '40px' }}><input type="checkbox" /></th>
+                <th onClick={() => requestSort('title')} style={{ cursor: 'pointer' }}>
+                  Title {getSortIcon('title')}
+                </th>
+                <th onClick={() => requestSort('tags')} style={{ width: '100px', cursor: 'pointer' }}>
+                  Tags {getSortIcon('tags')}
+                </th>
+                <th onClick={() => requestSort('owner')} style={{ width: '100px', cursor: 'pointer' }}>
+                  Owner {getSortIcon('owner')}
+                </th>
+                <th onClick={() => requestSort('dateModified')} style={{ width: '160px', cursor: 'pointer' }}>
+                  Date modified {getSortIcon('dateModified')}
+                </th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sortedData.length > 0 ? sortedData.map(doc => {
+                const resolvedType = getFileType(doc.title, doc.type);
+                return (
+                  <tr 
+                    key={doc.id} 
+                    className={selectedId === doc.id ? 'selected' : ''}
+                    onClick={() => onDocClick(doc.id)}
+                    onContextMenu={(e) => handleContextMenu(e, doc)}
+                  >
+                    <td><input type="checkbox" checked={selectedId === doc.id} readOnly /></td>
+                    <td className="title-cell">
+                      <div className="title-cell-content">
+                       <div className={`doc-icon ${resolvedType}`}>
+                        {resolvedType === 'pdf' ? 'PDF' : resolvedType === 'word' ? 'DOC' : resolvedType === 'image' ? 'IMG' : resolvedType === 'video' ? 'VID' : resolvedType === 'excel' ? 'XLS' : resolvedType === 'zip' ? 'ZIP' : resolvedType === 'text' ? 'TXT' : 'FILE'}
+                        </div>
+                        <span className="doc-title">{doc.title}</span>
+                        {doc.isPrivate && <span className="private-tag">private</span>}
+                      </div>
+                    </td>
+                    <td><span className="tag-pill">{doc.tags}</span></td>
+                    <td>{doc.owner}</td>
+                    <td>{doc.dateModified}</td>
+                  </tr>
+                );
+              }) : (
+                <tr className="empty-row">
+                  <td colSpan="5" className="empty-list-cell">
+                    <div className="empty-list-content">
+                      <FileText size={40} strokeWidth={1} />
+                      <p>No files found in this folder</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {contextMenu && (
@@ -139,6 +213,28 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
         body.dark-mode .toolbar-dropdown {
           background: rgba(255, 255, 255, 0.1);
         }
+        .toolbar-separator {
+          width: 1px;
+          height: 20px;
+          background: var(--glass-border);
+          margin: 0 5px;
+        }
+        .upload-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: var(--accent);
+          color: white;
+          border: none;
+          padding: 6px 12px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 500;
+          transition: background 0.2s;
+        }
+        .upload-btn:hover {
+          background: #2980b9;
+        }
         .toolbar-toggle {
           display: flex;
           align-items: center;
@@ -168,6 +264,13 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
           overflow-y: auto;
           position: relative;
         }
+        .loading-state {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          color: var(--text-muted);
+        }
         .doc-table {
           width: 100%;
           border-collapse: collapse;
@@ -195,21 +298,24 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .doc-table tr {
+        .doc-table tr:not(.empty-row) {
           cursor: pointer;
           transition: background 0.1s;
         }
-        .doc-table tr:hover {
+        .doc-table tr:not(.empty-row):hover {
           background: rgba(0, 0, 0, 0.02);
         }
-        body.dark-mode .doc-table tr:hover {
+        body.dark-mode .doc-table tr:not(.empty-row):hover {
           background: rgba(255, 255, 255, 0.05);
         }
         .doc-table tr.selected {
           background: rgba(52, 152, 219, 0.15);
         }
+        .doc-table.empty {
+          height: 100%;
+        }
         .empty-list-cell {
-          height: 300px !important;
+          height: 100% !important;
           text-align: center;
           border: none !important;
         }
@@ -221,6 +327,7 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
           gap: 15px;
           color: var(--text-muted);
           opacity: 0.5;
+          height: 100%;
         }
         .empty-list-content p {
           font-size: 14px;
@@ -249,6 +356,8 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
         .doc-icon.excel { background: #2ecc71; }
         .doc-icon.zip { background: #9b59b6; }
         .doc-icon.text { background: #7f8c8d; }
+        .doc-icon.video { background: #e67e22; }
+        .doc-icon.unknown { background: #95a5a6; }
         
         .private-tag {
           background: #34495e;

@@ -9,41 +9,79 @@ import Repository from './components/main/Repository';
 import SettingsModal from './components/sidebar/Settings';
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
+import UploadManager from './components/main/UploadManager';
+import { config } from './config';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authView, setAuthView] = useState('login'); // 'login' or 'signup'
+  const [authView, setAuthView] = useState('login');
   const [activeView, setActiveView] = useState('home');
   const [isRepoExpanded, setIsRepoExpanded] = useState(true);
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [isResizing, setIsResizing] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [selectedFolderId, setSelectedFolderId] = useState(null);
   
-  const [documents] = useState([
-    { id: 1, folderId: 'thor', title: 'Thor - Resume.pdf', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:02', type: 'pdf', isPrivate: true, url: 'https://pdfobject.com/pdf/sample.pdf' },
-    { id: 2, folderId: 'thor', title: 'Steve - Resume.pdf', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:02', type: 'pdf', url: '/api/proxy/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf' },
-    { id: 3, folderId: 'marvel', title: 'Tony - Resume.docx', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'word', url: 'https://calibre-ebook.com/downloads/demos/demo.docx' },
-    { id: 4, folderId: 'marvel', title: 'Bruce - Profile.jpg', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'image', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRcB3htu1qaYdt1pFuoil_aMFr79tyLtmJU7A&s' },
-    { id: 5, folderId: 'marvel', title: 'Hank - Data.xlsx', tags: 'hero', owner: 'Admin', dateModified: '19/04/2021 11:12', type: 'excel', url: 'https://go.microsoft.com/fwlink/?LinkID=521962' },
-    { id: 6, folderId: 'regard', title: 'Generia - Documents.zip', tags: 'none', owner: 'Admin', dateModified: '19/04/2021 11:04', type: 'zip', url: 'https://www.learningcontainer.com/download/sample-zip-files/?wpdmdl=1637&refresh=6a32876639eed1781696358' },
-    { id: 7, folderId: 'thor', title: 'Regart - Resume.pdf', tags: 'docc', owner: 'Admin', dateModified: '19/04/2021 11:45', type: 'pdf', url: 'https://www.adobe.com/support/products/enterprise/knowledgecenter/media/c4611_sample_explain.pdf' },
-    { id: 8, folderId: 'regard', title: 'Notes - Readme.txt', tags: 'info', owner: 'Admin', dateModified: '20/04/2021 09:15', type: 'text', url: 'https://sample-files.com/downloads/documents/txt/long-doc.txt' },
-  ]);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [selectedFolderData, setSelectedFolderData] = useState(null);
+  const [selectedDocId, setSelectedDocId] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  
+  const [uploads, setUploads] = useState([]);
 
-  const [selectedDocId, setSelectedDocId] = useState(null); // No default selection
+  // Fetch files when a folder is selected
+  const handleFolderSelect = async (folderId) => {
+    setSelectedFolderId(folderId);
+    setSelectedDocId(null);
+    setSelectedFolderData(null);
+    
+    if (!folderId) {
+      setDocuments([]);
+      return;
+    }
 
-  const activeDoc = documents.find(d => d.id === selectedDocId);
-  const filteredDocs = documents.filter(d => d.folderId === selectedFolderId);
+    // Fetch from real API
+    setLoadingFiles(true);
+    try {
+      const res = await fetch(`${config.API_BASE_URL}/api/folders/${folderId}`);
+      if (res.ok) {
+        const data = await res.json();
+        
+        // Save folder metadata for the properties panel
+        setSelectedFolderData({
+          id: data.id,
+          title: data.name,
+          type: 'folder',
+          dateModified: new Date(data.createdAt).toLocaleDateString(),
+          owner: 'Admin'
+        });
+
+        const mappedFiles = (data.files || []).map(f => ({
+          id: f.id,
+          folderId: f.folderId,
+          title: f.title,
+          type: f.type,
+          size: f.size,
+          owner: f.owner,
+          tags: f.tags,
+          dateModified: new Date(f.createdAt).toLocaleDateString(),
+          url: `${config.API_BASE_URL}/api/files/${f.id}/content`
+        }));
+        setDocuments(mappedFiles);
+      } else {
+        setDocuments([]);
+      }
+    } catch (e) {
+      console.error("Failed to fetch folder details. Using empty array.", e);
+      setDocuments([]);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
 
   const handleDocClick = (id) => {
     setSelectedDocId(selectedDocId === id ? null : id);
-  };
-
-  const handleFolderSelect = (folderId) => {
-    setSelectedFolderId(folderId);
-    setSelectedDocId(null);
   };
 
   const handleTogglePreview = () => {
@@ -51,6 +89,48 @@ function App() {
     setIsPreviewVisible(!isPreviewVisible);
     setTimeout(() => setIsResizing(false), 450);
   };
+
+  const handleFileUpload = (filesArray, targetFolderId) => {
+    if (!targetFolderId) {
+      alert("No target folder specified for upload.");
+      return;
+    }
+
+    const newUploads = filesArray.map(file => {
+      const CHUNK_SIZE = 5 * 1024 * 1024;
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      return {
+        id: Math.random().toString(36).substr(2, 9),
+        uploadId: crypto.randomUUID(), // Need a unique ID for the backend temp folder
+        file: file,
+        targetFolderId: targetFolderId,
+        status: 'uploading', // uploading, paused, completed, error
+        uploadedChunks: 0,
+        totalChunks: totalChunks
+      };
+    });
+
+    setUploads(prev => [...prev, ...newUploads]);
+  };
+
+  const handleUploadComplete = (newFile, targetFolderId) => {
+    if (targetFolderId === selectedFolderId) {
+      const mappedFile = {
+        id: newFile.id,
+        folderId: newFile.folderId,
+        title: newFile.title,
+        type: newFile.type,
+        size: newFile.size,
+        owner: newFile.owner,
+        tags: newFile.tags,
+        dateModified: new Date(newFile.createdAt).toLocaleDateString(),
+        url: `/api/files/${newFile.id}/content`
+      };
+      setDocuments(prev => [...prev, mappedFile]);
+    }
+  };
+
+  const activeDoc = documents.find(d => d.id === selectedDocId);
 
   if (!isAuthenticated) {
     return authView === 'login' ? (
@@ -88,7 +168,7 @@ function App() {
             />
           </Allotment.Pane>
 
-          {/* Repository & Properties Section - Only visible in repositories view */}
+          {/* Repository & Properties Section */}
           {activeView === 'repositories' && isRepoExpanded && (
             <Allotment.Pane preferredSize={280} minSize={200} maxSize={500}>
               <div key={activeView} className="view-transition-wrapper h-full">
@@ -98,10 +178,11 @@ function App() {
                       onCollapse={() => setIsRepoExpanded(false)} 
                       onFolderSelect={handleFolderSelect}
                       selectedFolderId={selectedFolderId}
+                      onFileUpload={handleFileUpload}
                     />
                   </Allotment.Pane>
                   <Allotment.Pane>
-                    <FileProperties data={activeDoc || {}} />
+                    <FileProperties data={activeDoc || selectedFolderData || {}} />
                   </Allotment.Pane>
                 </Allotment>
               </div>
@@ -115,11 +196,12 @@ function App() {
                 <Allotment>
                   <Allotment.Pane preferredSize="60%">
                     <FileList 
-                      data={filteredDocs} 
+                      data={documents} 
                       selectedId={selectedDocId}
                       onDocClick={handleDocClick}
                       isPreviewVisible={isPreviewVisible} 
                       setIsPreviewVisible={handleTogglePreview}
+                      isLoading={loadingFiles}
                     />
                   </Allotment.Pane>
                   <Allotment.Pane preferredSize="40%" visible={isPreviewVisible}>
@@ -140,6 +222,12 @@ function App() {
       </div>
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      
+      <UploadManager 
+        uploads={uploads} 
+        setUploads={setUploads} 
+        onUploadComplete={handleUploadComplete} 
+      />
 
       <style dangerouslySetInnerHTML={{ __html: `
         .app-container {

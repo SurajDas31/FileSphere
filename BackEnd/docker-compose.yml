@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: filesphere_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: filesphere
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - filesphere_network
+
+  api:
+    build:
+      context: ./file-managed-service
+      dockerfile: Dockerfile
+    container_name: filesphere_api
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=filesphere
+      - DB_PORT=5432
+      - GIN_MODE=release
+      - ENCRYPTION_KEY=supersecret32bytekey123456789012
+    depends_on:
+      - db
+    volumes:
+      # Map the local storage directory to the container's storage path
+      # This ensures uploaded files persist on your local machine
+      - ./storage:/app/storage
+    networks:
+      - filesphere_network
+
+volumes:
+  postgres_data:
+
+networks:
+  filesphere_network:
+    driver: bridge
