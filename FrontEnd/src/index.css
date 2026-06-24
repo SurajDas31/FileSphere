@@ -16,6 +16,7 @@
   --accent: #3498db;
   --overlay: rgba(255, 255, 255, 0.2);
   --solid-bg: #ffffff;
+  --solid-bg-fallback: rgba(255, 255, 255, 0.95);
 }
 
 body.dark-mode {
@@ -26,11 +27,30 @@ body.dark-mode {
   --text-muted: rgba(255, 255, 255, 0.6);
   --overlay: rgba(0, 0, 0, 0.6);
   --solid-bg: #1e1e1e;
+  --solid-bg-fallback: rgba(30, 30, 30, 0.97);
+}
+
+/* Glassmorphism Overrides */
+body.glassmorphic-ui {
+  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-glow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
+  --glass-blur: blur(25px);
+  --overlay: rgba(255, 255, 255, 0.05);
+  --solid-bg: rgba(255, 255, 255, 0.15);
+}
+
+body.glassmorphic-ui.dark-mode {
+  --glass-bg: rgba(15, 18, 25, 0.4);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-glow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+  --overlay: rgba(0, 0, 0, 0.4);
+  --solid-bg: rgba(15, 18, 25, 0.4);
 }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-image: url('./assets/background.png');
+  background-image: url('./assets/background.webp');
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
@@ -59,6 +79,105 @@ body {
   background: var(--solid-bg);
   border: 1px solid var(--glass-border);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* Redefining panels and tables under Glassmorphic theme */
+body.glassmorphic-ui .solid-panel,
+body.glassmorphic-ui .document-viewer,
+body.glassmorphic-ui .pdf-viewer-container,
+body.glassmorphic-ui .upload-manager {
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--glass-glow), 0 8px 32px 0 rgba(31, 38, 135, 0.08) !important;
+}
+
+/* Pop-up windows, dropdown lists, context menus, and modals must always have solid/highly-opaque backgrounds for maximum legibility */
+.context-menu,
+.settings-container,
+.modal-content,
+.notif-menu,
+.apps-menu,
+.profile-menu {
+  background: var(--solid-bg-fallback) !important;
+  backdrop-filter: blur(15px) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--text-main) !important;
+}
+
+/* Elevate the Sidebar pane's stacking context and make it overflow when a menu is open */
+.workspace.sidebar-menu-open > .split-view,
+.workspace.sidebar-menu-open > .split-view > .split-view-container,
+.workspace.sidebar-menu-open > div[class*="splitView"],
+.workspace.sidebar-menu-open > div[class*="splitView"] > div[class*="splitViewContainer"] {
+  overflow: visible !important;
+}
+
+.workspace.sidebar-menu-open > .split-view > .split-view-container > .split-view-view:first-child,
+.workspace.sidebar-menu-open > div[class*="splitView"] > div[class*="splitViewContainer"] > div[class*="splitViewView"]:first-child,
+.workspace.sidebar-menu-open > div[class*="splitView"] > div[class*="splitViewContainer"] > div:first-child {
+  z-index: 100000 !important;
+  overflow: visible !important;
+}
+
+.workspace.sidebar-menu-open > .split-view > .split-view-container > .split-view-view:first-child *,
+.workspace.sidebar-menu-open > div[class*="splitView"] > div[class*="splitViewContainer"] > div[class*="splitViewView"]:first-child *,
+.workspace.sidebar-menu-open > div[class*="splitView"] > div[class*="splitViewContainer"] > div:first-child * {
+  overflow: visible !important;
+}
+
+.workspace.sidebar-menu-open .apps-menu,
+.workspace.sidebar-menu-open .profile-menu {
+  z-index: 1000000 !important;
+}
+
+body.glassmorphic-ui .doc-table th {
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(8px) !important;
+  border-bottom-color: var(--glass-border) !important;
+}
+
+body.glassmorphic-ui.dark-mode .doc-table th {
+  background: rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* Ensure document text remains legible while keeping the layout glassmorphic */
+body.glassmorphic-ui .docx-preview-wrapper,
+body.glassmorphic-ui .excel-preview-wrapper {
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: #111 !important;
+  backdrop-filter: blur(10px) !important;
+  border-radius: 12px;
+}
+
+body.glassmorphic-ui.dark-mode .docx-preview-wrapper,
+body.glassmorphic-ui.dark-mode .excel-preview-wrapper {
+  background: rgba(30, 30, 30, 0.88) !important;
+  color: #eee !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+body.glassmorphic-ui .pdf-viewer-container {
+  background: rgba(40, 44, 48, 0.5) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+body.glassmorphic-ui .pdf-toolbar {
+  background: rgba(26, 28, 30, 0.6) !important;
+  backdrop-filter: blur(5px) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+}
+
+body.glassmorphic-ui .excel-table td {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+body.glassmorphic-ui.dark-mode .excel-table td {
+  border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
 .allotment-container {

@@ -1,6 +1,22 @@
+import { useState } from 'react';
 import { X, Settings, User, Bell, Shield, Database, Monitor, Globe, HelpCircle } from 'lucide-react';
 
 const SettingsModal = ({ isOpen, onClose }) => {
+  const [isGlassmorphism, setIsGlassmorphism] = useState(() => 
+    localStorage.getItem('ui_glassmorphism') !== 'false'
+  );
+
+  const handleGlassmorphismToggle = () => {
+    const newValue = !isGlassmorphism;
+    setIsGlassmorphism(newValue);
+    localStorage.setItem('ui_glassmorphism', newValue.toString());
+    if (newValue) {
+      document.body.classList.add('glassmorphic-ui');
+    } else {
+      document.body.classList.remove('glassmorphic-ui');
+    }
+  };
+
   if (!isOpen) return null;
 
   const categories = [
@@ -53,6 +69,20 @@ const SettingsModal = ({ isOpen, onClose }) => {
               </div>
               <div className="settings-option">
                 <div>
+                  <label>Glassmorphism Effect</label>
+                  <p>Enable frosted glass panels and background blur.</p>
+                </div>
+                <label className="switch">
+                  <input 
+                    type="checkbox" 
+                    checked={isGlassmorphism} 
+                    onChange={handleGlassmorphismToggle}
+                  />
+                  <span className="slider round"></span>
+                </label>
+              </div>
+              <div className="settings-option">
+                <div>
                   <label>Accent Color</label>
                   <p>Select your preferred highlight color.</p>
                 </div>
@@ -64,6 +94,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
                 </div>
               </div>
             </section>
+
 
             <section className="settings-section">
               <h3>Workspace</h3>
@@ -262,13 +293,18 @@ const SettingsModal = ({ isOpen, onClose }) => {
           padding: 8px 12px;
           border-radius: 8px;
           border: 1px solid var(--glass-border);
-          background: rgba(0, 0, 0, 0.05);
+          background: rgba(255, 255, 255, 0.1);
           color: var(--text-main);
           outline: none;
           min-width: 150px;
+          cursor: pointer;
         }
         body.dark-mode .settings-select {
-          background: rgba(255, 255, 255, 0.1);
+          background: rgba(0, 0, 0, 0.25);
+        }
+        .settings-select option {
+          background: var(--solid-bg-fallback, #ffffff);
+          color: var(--text-main, #1a1a1a);
         }
 
         .color-presets {
@@ -318,6 +354,57 @@ const SettingsModal = ({ isOpen, onClose }) => {
           border-radius: 10px;
           font-weight: 600;
           cursor: pointer;
+        }
+
+        /* Switch Toggler Style */
+        .switch {
+          position: relative;
+          display: inline-block;
+          width: 44px;
+          height: 24px;
+          flex-shrink: 0;
+        }
+        .switch input { 
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0,0,0,0.1);
+          transition: .3s;
+          border: 1px solid var(--glass-border);
+        }
+        body.dark-mode .slider {
+          background-color: rgba(255,255,255,0.1);
+        }
+        .slider:before {
+          position: absolute;
+          content: "";
+          height: 16px;
+          width: 16px;
+          left: 3px;
+          bottom: 2px;
+          background-color: var(--text-main);
+          transition: .3s;
+        }
+        .switch input:checked + .slider {
+          background-color: var(--accent);
+        }
+        .switch input:checked + .slider:before {
+          transform: translateX(20px);
+          background-color: white;
+        }
+        .slider.round {
+          border-radius: 24px;
+        }
+        .slider.round:before {
+          border-radius: 50%;
         }
       `}} />
     </div>

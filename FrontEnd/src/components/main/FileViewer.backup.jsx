@@ -1,4 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import * as zip from "@zip.js/zip.js";
+import { renderAsync } from 'docx-preview';
+import * as XLSX from 'xlsx';
 import PdfViewer from './PdfViewer';
 import { 
   FileSearch, 
@@ -84,7 +87,6 @@ const FileViewer = ({ data }) => {
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch zip file');
       const blob = await response.blob();
-      const zip = await import("@zip.js/zip.js");
       const reader = new zip.ZipReader(new zip.BlobReader(blob));
       const entries = await reader.getEntries();
       
@@ -119,11 +121,9 @@ const FileViewer = ({ data }) => {
       if (type === 'word') {
         if (docxRef.current) {
           docxRef.current.innerHTML = '';
-          const { renderAsync } = await import("docx-preview");
           await renderAsync(arrayBuffer, docxRef.current);
         }
       } else if (type === 'excel') {
-        const XLSX = await import("xlsx");
         const workbook = XLSX.read(arrayBuffer);
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];

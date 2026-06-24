@@ -498,3 +498,105 @@ func DeleteFile(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "File deleted successfully"})
 }
+
+// UpdateFile handles PUT /api/files/:id
+func UpdateFile(c *gin.Context) {
+	id := c.Param("id")
+	var file models.File
+
+	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+
+	var input struct {
+		Title    *string    `json:"title"`
+		FolderID *uuid.UUID `json:"folderId"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if input.Title != nil {
+		file.Title = *input.Title
+	}
+	if input.FolderID != nil {
+		file.FolderID = *input.FolderID
+	}
+
+	if err := database.DB.Save(&file).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, file)
+}
+
+// CopyFile handles POST /api/files/:id/copy
+func CopyFile(c *gin.Context) {
+	id := c.Param("id")
+	var file models.File
+
+	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+
+	var input struct {
+		FolderID uuid.UUID `json:"folderId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Generate new ID and storage path for copied file
+	newFileID := uuid.New()
+	extension := filepath.Ext(file.Title)
+	newInternalName := fmt.Sprintf("%s%s", newFileID.String(), extension)
+	newStoragePath := filepath.Join(StoragePath, newInternalName)
+
+	// Copy physical file
+	srcFile, err := os.Open(file.StoragePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open source file"})
+		return
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(newStoragePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create destination file"})
+		return
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		os.Remove(newStoragePath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to copy physical file data"})
+		return
+	}
+
+	// Create new File database record
+	copiedFile := models.File{
+		ID:          newFileID,
+		FolderID:    input.FolderID,
+		Title:       file.Title,
+		Type:        file.Type,
+		Size:        file.Size,
+		StoragePath: newStoragePath,
+		Owner:       file.Owner,
+		Tags:        file.Tags,
+	}
+
+	if err := database.DB.Create(&copiedFile).Error; err != nil {
+		os.Remove(newStoragePath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create copied file metadata"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, copiedFile)
+}

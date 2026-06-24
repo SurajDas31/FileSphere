@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, FileText, Edit, Copy, Trash, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import ContextMenu from './ContextMenu';
+import { config } from '../../config';
 
 const getFileType = (filename, type) => {
   if (type && type !== 'unknown') return type;
@@ -16,23 +17,160 @@ const getFileType = (filename, type) => {
   return 'unknown';
 };
 
-const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreviewVisible, isLoading }) => {
+const FileList = ({ 
+  data, 
+  selectedId, 
+  selectedDocIds = [], 
+  setSelectedDocIds, 
+  onDocClick, 
+  isPreviewVisible, 
+  setIsPreviewVisible, 
+  isLoading, 
+  onFileUpdated,
+  onDeleteFiles,
+  onCopyFiles,
+  onMoveFiles,
+  onFileUpload,
+  currentFolderId,
+  notifyOperation
+}) => {
   const [contextMenu, setContextMenu] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [editingFileId, setEditingFileId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  const handleRenameStart = (doc) => {
+    setEditingFileId(doc.id);
+    setEditingTitle(doc.title);
+  };
+
+  const handleRenameCancel = () => {
+    setEditingFileId(null);
+    setEditingTitle('');
+  };
+
+  const handleRenameSubmit = async (fileId) => {
+    if (!editingTitle || editingTitle.trim() === '') {
+      setEditingFileId(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${config.API_BASE_URL}/api/files/${fileId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editingTitle.trim() })
+      });
+      if (res.ok) {
+        if (onFileUpdated) onFileUpdated();
+        if (notifyOperation) notifyOperation("File Renamed", `File renamed to "${editingTitle.trim()}" successfully.`, true);
+      } else {
+        if (notifyOperation) notifyOperation("File Action Failed", "Failed to rename file.", false);
+      }
+    } catch (err) {
+      console.error("Rename error", err);
+      if (notifyOperation) notifyOperation("File Action Failed", "Network error while renaming file.", false);
+    } finally {
+      setEditingFileId(null);
+    }
+  };
+
+  const triggerDelete = (doc) => {
+    let targets = [doc];
+    if (selectedDocIds.includes(doc.id)) {
+      targets = data.filter(d => selectedDocIds.includes(d.id));
+    }
+    const filenamesString = targets.map(t => t.title).join(', ');
+    const fileIds = targets.map(t => t.id);
+    onDeleteFiles(fileIds, filenamesString);
+  };
+
+  const triggerCopy = (doc) => {
+    let targets = [doc];
+    if (selectedDocIds.includes(doc.id)) {
+      targets = data.filter(d => selectedDocIds.includes(d.id));
+    }
+    const filenamesString = targets.map(t => t.title).join(', ');
+    const fileIds = targets.map(t => t.id);
+    onCopyFiles(fileIds, filenamesString);
+  };
+
+  const triggerMove = (doc) => {
+    let targets = [doc];
+    if (selectedDocIds.includes(doc.id)) {
+      targets = data.filter(d => selectedDocIds.includes(d.id));
+    }
+    const filenamesString = targets.map(t => t.title).join(', ');
+    const fileIds = targets.map(t => t.id);
+    onMoveFiles(fileIds, filenamesString);
+  };
 
   const handleContextMenu = (e, doc) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // If right-clicked document is not selected, select it exclusively
+    if (!selectedDocIds.includes(doc.id)) {
+      setSelectedDocIds([doc.id]);
+      onDocClick(doc.id);
+    }
+
+    const isMulti = selectedDocIds.includes(doc.id) && selectedDocIds.length > 1;
+
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       options: [
-        { label: 'Open', icon: <ExternalLink size={14} />, onClick: () => console.log('Open', doc.title) },
-        { label: 'Edit', icon: <Edit size={14} />, onClick: () => console.log('Edit', doc.title) },
-        { label: 'Copy', icon: <Copy size={14} />, onClick: () => console.log('Copy', doc.title) },
-        { label: 'Delete', icon: <Trash size={14} />, onClick: () => console.log('Delete', doc.title) },
+        { label: 'Rename', icon: <Edit size={14} />, onClick: () => handleRenameStart(doc), disabled: isMulti },
+        { label: 'Copy', icon: <Copy size={14} />, onClick: () => triggerCopy(doc) },
+        { label: 'Move', icon: <ExternalLink size={14} />, onClick: () => triggerMove(doc) },
+        { label: 'Delete', icon: <Trash size={14} />, onClick: () => triggerDelete(doc) },
       ]
     });
+  };
+
+  const handleContainerDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDraggingOver(true);
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleContainerDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleContainerDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      if (onFileUpload && currentFolderId) {
+        onFileUpload(Array.from(e.dataTransfer.files), currentFolderId);
+      }
+    }
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedDocIds(data.map(doc => doc.id));
+    } else {
+      setSelectedDocIds([]);
+    }
+  };
+
+  const handleSelectOne = (e, docId) => {
+    e.stopPropagation();
+    if (e.target.checked) {
+      setSelectedDocIds(prev => [...prev, docId]);
+    } else {
+      setSelectedDocIds(prev => prev.filter(id => id !== docId));
+    }
   };
 
   const requestSort = (key) => {
@@ -78,7 +216,27 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
   };
 
   return (
-    <div className="document-list glass-panel">
+    <div 
+      className="document-list glass-panel"
+      onDragOver={handleContainerDragOver}
+      onDragLeave={handleContainerDragLeave}
+      onDrop={handleContainerDrop}
+      style={{ position: 'relative' }}
+    >
+      {isDraggingOver && (
+        <div className="drag-drop-overlay">
+          <div className="drag-drop-overlay-content">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" className="upload-glow-icon">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <h3 style={{ marginTop: '12px', fontWeight: 600 }}>Drop files to upload</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>Upload directly to current folder</p>
+          </div>
+        </div>
+      )}
+
       <div className="list-toolbar">
         <div className="toolbar-group">
           <span>Display:</span>
@@ -112,7 +270,13 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
           <table className={`doc-table ${sortedData.length === 0 ? 'empty' : ''}`}>
             <thead>
               <tr>
-                <th style={{ width: '40px' }}><input type="checkbox" /></th>
+                <th style={{ width: '40px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={data.length > 0 && selectedDocIds.length === data.length}
+                    onChange={handleSelectAll}
+                  />
+                </th>
                 <th onClick={() => requestSort('title')} style={{ cursor: 'pointer' }}>
                   Title {getSortIcon('title')}
                 </th>
@@ -130,20 +294,122 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
             <tbody>
               {sortedData.length > 0 ? sortedData.map(doc => {
                 const resolvedType = getFileType(doc.title, doc.type);
+                const isSelected = selectedDocIds.includes(doc.id);
                 return (
                   <tr 
                     key={doc.id} 
-                    className={selectedId === doc.id ? 'selected' : ''}
+                    className={isSelected ? 'selected' : ''}
                     onClick={() => onDocClick(doc.id)}
                     onContextMenu={(e) => handleContextMenu(e, doc)}
+                    draggable="true"
+                    onDragStart={(e) => {
+                      let draggedDocs = [doc];
+                      if (selectedDocIds.includes(doc.id)) {
+                        draggedDocs = data.filter(d => selectedDocIds.includes(d.id));
+                      }
+                      
+                      e.dataTransfer.setData("application/json", JSON.stringify({
+                        type: 'file',
+                        files: draggedDocs.map(d => ({ id: d.id, title: d.title }))
+                      }));
+                      e.dataTransfer.effectAllowed = "copyMove";
+
+                      // Create beautiful custom glassmorphism drag ghost inheriting app styling and font
+                      const dragImage = document.createElement('div');
+                      dragImage.id = 'drag-image-ghost';
+                      dragImage.style.position = 'absolute';
+                      dragImage.style.top = '-1000px';
+                      dragImage.style.left = '-1000px';
+                      dragImage.style.padding = '10px 16px';
+                      dragImage.style.borderRadius = '12px';
+                      dragImage.style.fontFamily = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+                      dragImage.style.fontSize = '13px';
+                      dragImage.style.fontWeight = '500';
+                      dragImage.style.zIndex = '999999';
+                      
+                      const isDarkMode = document.body.classList.contains('dark-mode');
+                      const isGlassmorphic = document.body.classList.contains('glassmorphic-ui');
+                      
+                      if (isGlassmorphic) {
+                        if (isDarkMode) {
+                          dragImage.style.background = 'rgba(15, 18, 25, 0.7)';
+                          dragImage.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+                          dragImage.style.color = '#ffffff';
+                        } else {
+                          dragImage.style.background = 'rgba(255, 255, 255, 0.7)';
+                          dragImage.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+                          dragImage.style.color = '#1a1a1a';
+                        }
+                        dragImage.style.backdropFilter = 'blur(10px)';
+                        dragImage.style.webkitBackdropFilter = 'blur(10px)';
+                        dragImage.style.boxShadow = '0 8px 32px 0 rgba(31, 38, 135, 0.15)';
+                      } else {
+                        if (isDarkMode) {
+                          dragImage.style.background = '#1e1e1e';
+                          dragImage.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                          dragImage.style.color = '#ffffff';
+                        } else {
+                          dragImage.style.background = '#ffffff';
+                          dragImage.style.border = '1px solid rgba(0, 0, 0, 0.15)';
+                          dragImage.style.color = '#1a1a1a';
+                        }
+                        dragImage.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                      }
+
+                      if (draggedDocs.length === 1) {
+                        dragImage.innerText = `📄 ${draggedDocs[0].title}`;
+                      } else {
+                        dragImage.innerText = `🗂️ Dragging ${draggedDocs.length} files`;
+                      }
+
+                      document.body.appendChild(dragImage);
+                      e.dataTransfer.setDragImage(dragImage, 10, 10);
+                      
+                      setTimeout(() => {
+                        if (document.body.contains(dragImage)) {
+                          document.body.removeChild(dragImage);
+                        }
+                      }, 0);
+                    }}
                   >
-                    <td><input type="checkbox" checked={selectedId === doc.id} readOnly /></td>
+                    <td>
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected} 
+                        onChange={(e) => handleSelectOne(e, doc.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </td>
                     <td className="title-cell">
                       <div className="title-cell-content">
                        <div className={`doc-icon ${resolvedType}`}>
                         {resolvedType === 'pdf' ? 'PDF' : resolvedType === 'word' ? 'DOC' : resolvedType === 'image' ? 'IMG' : resolvedType === 'video' ? 'VID' : resolvedType === 'excel' ? 'XLS' : resolvedType === 'zip' ? 'ZIP' : resolvedType === 'text' ? 'TXT' : 'FILE'}
                         </div>
-                        <span className="doc-title">{doc.title}</span>
+                        {editingFileId === doc.id ? (
+                          <input 
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onBlur={() => handleRenameSubmit(doc.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameSubmit(doc.id);
+                              if (e.key === 'Escape') handleRenameCancel();
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="file-rename-input"
+                            autoFocus
+                          />
+                        ) : (
+                          <span 
+                            className="doc-title"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              handleRenameStart(doc);
+                            }}
+                          >
+                            {doc.title}
+                          </span>
+                        )}
                         {doc.isPrivate && <span className="private-tag">private</span>}
                       </div>
                     </td>
@@ -376,6 +642,57 @@ const FileList = ({ data, selectedId, onDocClick, isPreviewVisible, setIsPreview
         }
         body.dark-mode .tag-pill {
           background: rgba(255, 255, 255, 0.1);
+        }
+        .file-rename-input {
+          background: rgba(255, 255, 255, 0.1) !important;
+          border: 1px solid var(--accent) !important;
+          color: var(--text-main) !important;
+          border-radius: 4px !important;
+          padding: 2px 6px !important;
+          font-size: 13px !important;
+          outline: none !important;
+          width: 80% !important;
+        }
+        body.dark-mode .file-rename-input {
+          background: rgba(0, 0, 0, 0.25) !important;
+        }
+
+        .drag-drop-overlay {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(255, 255, 255, 0.2);
+          backdrop-filter: var(--glass-blur, blur(10px));
+          -webkit-backdrop-filter: var(--glass-blur, blur(10px));
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          border: 2px dashed var(--accent);
+          border-radius: 12px;
+          margin: 10px;
+          animation: fadeIn 0.2s ease-out;
+        }
+        body.dark-mode .drag-drop-overlay {
+          background: rgba(0, 0, 0, 0.4);
+        }
+        .drag-drop-overlay-content {
+          text-align: center;
+          color: var(--text-main);
+          font-family: inherit;
+        }
+        .upload-glow-icon {
+          color: var(--accent);
+          margin-bottom: 15px;
+          animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 0.8; }
+          50% { transform: scale(1.1); opacity: 1; }
+          100% { transform: scale(1); opacity: 0.8; }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
       `}} />
     </div>

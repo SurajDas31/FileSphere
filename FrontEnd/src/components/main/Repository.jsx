@@ -85,7 +85,7 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }) => {
   return ReactDOM.createPortal(modalContent, document.body);
 };
 
-const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload }) => {
+const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload, onFileDrop, showToast, notifyOperation }) => {
   const [repositories, setRepositories] = useState([]);
   const fileInputRef = useRef(null);
   const [uploadTargetId, setUploadTargetId] = useState(null);
@@ -140,13 +140,14 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
       
       if (res.ok) {
         fetchFolders();
+        if (notifyOperation) notifyOperation("Folder Created", `Folder "${name}" created successfully.`, true);
       } else {
         const err = await res.json();
-        alert("Failed to create folder: " + err.error);
+        if (notifyOperation) notifyOperation("Folder Action Failed", "Failed to create folder: " + err.error, false);
       }
     } catch (e) {
       console.error("Create folder error", e);
-      alert("Network error.");
+      if (notifyOperation) notifyOperation("Folder Action Failed", "Network error while creating folder.", false);
     }
   };
 
@@ -163,13 +164,14 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
       });
       if (res.ok) {
         fetchFolders();
+        if (notifyOperation) notifyOperation("Folder Renamed", `Folder renamed to "${newName}" successfully.`, true);
       } else {
         const err = await res.json();
-        alert("Failed to rename folder: " + err.error);
+        if (notifyOperation) notifyOperation("Folder Action Failed", "Failed to rename folder: " + err.error, false);
       }
     } catch (e) {
       console.error("Rename folder error", e);
-      alert("Network error.");
+      if (notifyOperation) notifyOperation("Folder Action Failed", "Network error while renaming folder.", false);
     }
   };
 
@@ -178,7 +180,7 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
   };
 
   const confirmDeleteFolder = async () => {
-    const { id } = deleteModal;
+    const { id, name } = deleteModal;
     setDeleteModal({ isOpen: false, id: null, name: '' });
     try {
       const res = await fetch(`${config.API_BASE_URL}/api/folders/${id}`, { method: 'DELETE' });
@@ -187,13 +189,14 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
         if (selectedFolderId === id) {
            onFolderSelect(null);
         }
+        if (notifyOperation) notifyOperation("Folder Deleted", `Folder "${name}" deleted permanently.`, true);
       } else {
         const err = await res.json();
-        alert("Failed to delete folder: " + err.error);
+        if (notifyOperation) notifyOperation("Folder Action Failed", "Failed to delete folder: " + err.error, false);
       }
     } catch (e) {
       console.error("Delete folder error", e);
-      alert("Network error.");
+      if (notifyOperation) notifyOperation("Folder Action Failed", "Network error while deleting folder.", false);
     }
   };
 
@@ -235,6 +238,8 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
             onInitiateCreate={initiateCreateFolder}
             onSubmitCreate={submitCreateFolder}
             onCancelCreate={cancelCreateFolder}
+            onFileDrop={onFileDrop}
+            onFileUpload={onFileUpload}
           />
         )}
       </div>
@@ -294,7 +299,7 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
   );
 };
 
-const RepoTree = ({ data, onFolderSelect, selectedFolderId, onCreateFolder, onRenameFolder, onDeleteFolder, onUploadClick, creatingNodeParentId, onInitiateCreate, onSubmitCreate, onCancelCreate }) => {
+const RepoTree = ({ data, onFolderSelect, selectedFolderId, onCreateFolder, onRenameFolder, onDeleteFolder, onUploadClick, creatingNodeParentId, onInitiateCreate, onSubmitCreate, onCancelCreate, onFileDrop, onFileUpload }) => {
   return (
     <div className="repo-tree">
       {data.map(node => (
@@ -312,6 +317,8 @@ const RepoTree = ({ data, onFolderSelect, selectedFolderId, onCreateFolder, onRe
           onInitiateCreate={onInitiateCreate}
           onSubmitCreate={onSubmitCreate}
           onCancelCreate={onCancelCreate}
+          onFileDrop={onFileDrop}
+          onFileUpload={onFileUpload}
         />
       ))}
     </div>
@@ -355,7 +362,7 @@ const GhostNode = ({ depth, onSubmit, onCancel }) => {
   );
 };
 
-const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolder, onRenameFolder, onDeleteFolder, onUploadClick, creatingNodeParentId, onInitiateCreate, onSubmitCreate, onCancelCreate }) => {
+const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolder, onRenameFolder, onDeleteFolder, onUploadClick, creatingNodeParentId, onInitiateCreate, onSubmitCreate, onCancelCreate, onFileDrop, onFileUpload }) => {
   // Requirement 4: All folders collapsed by default
   const [isOpen, setIsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
@@ -364,6 +371,67 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(node.label);
   const inputRef = useRef(null);
+  const hoverTimerRef = useRef(null);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Set drop effect
+    e.dataTransfer.dropEffect = 'copy';
+
+    if (!isOpen && !hoverTimerRef.current) {
+      hoverTimerRef.current = setTimeout(() => {
+        setIsOpen(true);
+        hoverTimerRef.current = null;
+      }, 800); // 800ms hover delay
+    }
+  };
+
+  const handleDragLeave = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+
+    try {
+      // Local files drop
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        if (onFileUpload) {
+          onFileUpload(Array.from(e.dataTransfer.files), node.id);
+        }
+        return;
+      }
+
+      const dragData = JSON.parse(e.dataTransfer.getData("application/json") || "{}");
+      if (dragData.type === 'file') {
+        if (onFileDrop) {
+          if (dragData.files && dragData.files.length > 0) {
+            onFileDrop(
+              dragData.files.map(f => f.id),
+              dragData.files.map(f => f.title).join(', '),
+              node.id,
+              node.label
+            );
+          } else {
+            onFileDrop([dragData.id], dragData.title, node.id, node.label);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error drop file", err);
+    }
+  };
 
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedFolderId === node.id;
@@ -433,6 +501,9 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
         onDoubleClick={() => {
           if (!isEditing) setIsOpen(!isOpen);
         }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <span className="toggle" onClick={(e) => {
           e.stopPropagation();
@@ -484,6 +555,8 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
               onInitiateCreate={onInitiateCreate}
               onSubmitCreate={onSubmitCreate}
               onCancelCreate={onCancelCreate}
+              onFileDrop={onFileDrop}
+              onFileUpload={onFileUpload}
             />
           ))}
         </div>
