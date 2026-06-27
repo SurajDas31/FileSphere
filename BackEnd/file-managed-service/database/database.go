@@ -48,17 +48,5 @@ func Connect() {
 	}
 
 	log.Println("Database migration completed")
-
-	// Seed Default Root Folder
-	var rootCount int64
-	db.Model(&models.Folder{}).Where("parent_id IS NULL").Count(&rootCount)
-	if rootCount == 0 {
-		db.Create(&models.Folder{Name: "Root Directory"})
-		log.Println("Root directory created")
-	} else {
-		db.Model(&models.Folder{}).Where("parent_id IS NULL AND name = ?", "Default").Update("name", "Root Directory")
-		log.Println("Existing root folder updated to Root Directory")
-	}
-
 	DB = db
 }

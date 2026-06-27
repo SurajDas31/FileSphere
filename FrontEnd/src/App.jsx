@@ -16,12 +16,21 @@ import ToastContainer from './components/main/ToastContainer';
 
 const CopyMoveModal = ({ isOpen, filename, foldername, folders, actionType, onCopy, onMove, onCancel }) => {
   const [selectedFolderId, setSelectedFolderId] = useState('');
+  const [hasInitialized, setHasInitialized] = useState(false);
   
   useEffect(() => {
-    if (isOpen && folders && folders.length > 0) {
-      setSelectedFolderId(folders[0].id);
+    if (!isOpen) {
+      setHasInitialized(false);
+      setSelectedFolderId('');
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && !hasInitialized && folders && folders.length > 0) {
+      setSelectedFolderId(folders[0].id);
+      setHasInitialized(true);
+    }
+  }, [isOpen, folders, hasInitialized]);
 
   if (!isOpen) return null;
 
@@ -276,7 +285,10 @@ function App() {
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [isResizing, setIsResizing] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
+  const [isSidebarAutoHide, setIsSidebarAutoHide] = useState(false);
+  const [isHoveringLeft, setIsHoveringLeft] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState('general');
   
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [selectedFolderData, setSelectedFolderData] = useState(null);
@@ -289,10 +301,125 @@ function App() {
   const [foldersList, setFoldersList] = useState([]);
   const [toasts, setToasts] = useState([]);
 
+  const [userProfile, setUserProfile] = useState(null);
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (e) {
+        console.warn("Logout request failed, invalidating locally", e);
+      }
+    }
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUserProfile(null);
+    setSelectedFolderId(null);
+    setSelectedFolderData(null);
+    setSelectedDocId(null);
+    setSelectedDocIds([]);
+    setDocuments([]);
+    setFoldersList([]);
+    setUploads([]);
+    setIsAuthenticated(false);
+  };
+
+  const fetchUserProfile = async (token) => {
+    try {
+      const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserProfile(data);
+        localStorage.setItem('user', JSON.stringify(data));
+      }
+
+      // Fetch user settings preferences
+      const settingsRes = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/user/settings`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setIsSidebarAutoHide(settingsData.autoHideSidebar);
+        if (settingsData.theme === 'dark') {
+          document.body.classList.add('dark-mode');
+        } else {
+          document.body.classList.remove('dark-mode');
+        }
+        if (settingsData.glassmorphism) {
+          document.body.classList.add('glassmorphic-ui');
+        } else {
+          document.body.classList.remove('glassmorphic-ui');
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load user profile or settings", e);
+    }
+  };
+
   // Request browser notification permission on mount
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
+    }
+    
+    // Load Dark Mode configuration from localStorage
+    const savedDark = localStorage.getItem('theme_dark_mode');
+    if (savedDark === 'true') {
+      document.body.classList.add('dark-mode');
+    } else if (savedDark === 'false') {
+      document.body.classList.remove('dark-mode');
+    }
+
+    // Auto-hide sidebar hover listener: trigger if mouse x coordinate is less than 30px, or if it stays over the sidebar
+    const handleMouseMove = (e) => {
+      if (e.clientX < 40) {
+        setIsHoveringLeft(true);
+      } else if (e.clientX > 100) {
+        setIsHoveringLeft(false);
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
+  // Handle OAuth2 Redirect callback & persistent authentication
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+      localStorage.setItem('token', urlToken);
+      setIsAuthenticated(true);
+      fetchUserProfile(urlToken);
+      // Clean up the URL query parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+      showToast('Signed in successfully!', 'success');
+    } else {
+      const storedToken = localStorage.getItem('token');
+      if (storedToken) {
+        setIsAuthenticated(true);
+        // Load user from cache first, then fetch fresh copy
+        const cachedUser = localStorage.getItem('user');
+        if (cachedUser) {
+          try {
+            setUserProfile(JSON.parse(cachedUser));
+          } catch { /* ignore */ }
+        }
+        fetchUserProfile(storedToken);
+      }
     }
   }, []);
 
@@ -326,7 +453,8 @@ function App() {
     fileIds: [],
     filename: '',
     targetFolderId: null,
-    targetFolderName: ''
+    targetFolderName: '',
+    dragType: 'file' // 'file' or 'folder'
   });
 
   const [deleteModal, setDeleteModal] = useState({
@@ -335,18 +463,19 @@ function App() {
     filenamesString: ''
   });
 
-  const handleFileDrop = (fileIds, filenamesString, targetFolderId, targetFolderName) => {
+  const handleFileDrop = (fileIds, filenamesString, targetFolderId, targetFolderName, dragType = 'file') => {
     setCopyMoveModal({
       isOpen: true,
       fileIds,
       filename: filenamesString,
       targetFolderId,
-      targetFolderName
+      targetFolderName,
+      dragType
     });
   };
 
   const openCopyMoveModalForContext = (fileIds, filenamesString) => {
-    fetch(`${config.API_BASE_URL}/api/folders`)
+    fetch(`${config.FILE_API_BASE_URL || ''}/api/folders`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -373,7 +502,7 @@ function App() {
   };
 
   const handleConfirmCopy = async (chosenFolderId) => {
-    const { fileIds, targetFolderId } = copyMoveModal;
+    const { fileIds, targetFolderId, dragType } = copyMoveModal;
     const destFolderId = chosenFolderId || targetFolderId;
     if (!destFolderId) {
       showToast("Please select a target folder.", "info");
@@ -381,33 +510,36 @@ function App() {
     }
     setCopyMoveModal(prev => ({ ...prev, isOpen: false }));
 
-    console.log(destFolderId)
     try {
-      showToast("Copying selected file(s)...", "info");
-      triggerPushNotification("File Copy Started", "Copying selected files in background...");
+      const isFolder = dragType === 'folder';
+      showToast(isFolder ? "Copying folder structure..." : "Copying selected file(s)...", "info");
+      triggerPushNotification(isFolder ? "Folder Copy Started" : "File Copy Started", "Copying items in background...");
       
-      const promises = fileIds.map(fileId =>
-        fetch(`${config.API_BASE_URL}/api/files/${fileId}/copy`, {
+      const promises = fileIds.map(id => {
+        const url = isFolder 
+          ? `${config.FILE_API_BASE_URL || ''}/api/folders/${id}/copy`
+          : `${config.FILE_API_BASE_URL || ''}/api/files/${id}/copy`;
+        return fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderId: destFolderId })
-        })
-      );
+          body: JSON.stringify({ parentId: destFolderId, folderId: destFolderId })
+        });
+      });
       const results = await Promise.all(promises);
       if (results.every(res => res.ok)) {
-        handleFolderSelect(selectedFolderId);
-        notifyOperation("Copy Complete", "Selected file(s) copied successfully.", true);
+        // Trigger page refresh or repo tree reload
+        window.location.reload(); 
       } else {
-        notifyOperation("Copy Failed", "Failed to copy some files.", false);
+        notifyOperation("Copy Failed", "Failed to copy some items.", false);
       }
     } catch (e) {
       console.error("Copy error", e);
-      notifyOperation("Copy Failed", "Network error occurred while copying files.", false);
+      notifyOperation("Copy Failed", "Network error occurred while copying items.", false);
     }
   };
 
   const handleConfirmMove = async (chosenFolderId) => {
-    const { fileIds, targetFolderId } = copyMoveModal;
+    const { fileIds, targetFolderId, dragType } = copyMoveModal;
     const destFolderId = chosenFolderId || targetFolderId;
     if (!destFolderId) {
       alert("Please select a target folder.");
@@ -415,26 +547,36 @@ function App() {
     }
     setCopyMoveModal(prev => ({ ...prev, isOpen: false }));
     try {
-      showToast("Moving selected file(s)...", "info");
-      triggerPushNotification("File Move Started", "Moving selected files in background...");
+      const isFolder = dragType === 'folder';
+      showToast(isFolder ? "Moving folder..." : "Moving selected file(s)...", "info");
+      triggerPushNotification(isFolder ? "Folder Move Started" : "File Move Started", "Moving items in background...");
       
-      const promises = fileIds.map(fileId =>
-        fetch(`${config.API_BASE_URL}/api/files/${fileId}`, {
+      const promises = fileIds.map(id => {
+        const url = isFolder 
+          ? `${config.FILE_API_BASE_URL || ''}/api/folders/${id}/move`
+          : `${config.FILE_API_BASE_URL || ''}/api/files/${id}`;
+        
+        // Go backend folder move accepts JSON struct with parentId
+        // Go backend file update accepts JSON struct with folderId
+        const bodyObj = isFolder 
+          ? { parentId: destFolderId } 
+          : { folderId: destFolderId };
+
+        return fetch(url, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderId: Number(destFolderId) })
-        })
-      );
+          body: JSON.stringify(bodyObj)
+        });
+      });
       const results = await Promise.all(promises);
       if (results.every(res => res.ok)) {
-        handleFolderSelect(selectedFolderId);
-        notifyOperation("Move Complete", "Selected file(s) moved successfully.", true);
+        window.location.reload();
       } else {
-        notifyOperation("Move Failed", "Failed to move some files.", false);
+        notifyOperation("Move Failed", "Failed to move some items.", false);
       }
     } catch (e) {
       console.error("Move error", e);
-      notifyOperation("Move Failed", "Network error occurred while moving files.", false);
+      notifyOperation("Move Failed", "Network error occurred while moving items.", false);
     }
   };
 
@@ -454,7 +596,7 @@ function App() {
       triggerPushNotification("File Deletion Started", "Deleting selected file(s) permanently...");
       
       const promises = fileIds.map(fileId =>
-        fetch(`${config.API_BASE_URL}/api/files/${fileId}`, {
+        fetch(`${config.FILE_API_BASE_URL || ''}/api/files/${fileId}`, {
           method: 'DELETE'
         })
       );
@@ -497,7 +639,7 @@ function App() {
     // Fetch from real API
     setLoadingFiles(true);
     try {
-      const res = await fetch(`${config.API_BASE_URL}/api/folders/${folderId}`);
+      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders/${folderId}`);
       if (res.ok) {
         const data = await res.json();
         
@@ -519,7 +661,7 @@ function App() {
           owner: f.owner,
           tags: f.tags,
           dateModified: new Date(f.createdAt).toLocaleDateString(),
-          url: `${config.API_BASE_URL}/api/files/${f.id}/content`
+          url: `${config.FILE_API_BASE_URL || ''}/api/files/${f.id}/content`
         }));
         setDocuments(mappedFiles);
       } else {
@@ -594,7 +736,20 @@ function App() {
   if (!isAuthenticated) {
     return authView === 'login' ? (
       <Login 
-        onLogin={() => setIsAuthenticated(true)} 
+        onLogin={() => {
+          const cached = localStorage.getItem('user');
+          if (cached) {
+            try {
+              setUserProfile(JSON.parse(cached));
+            } catch (err) {}
+          }
+          setIsAuthenticated(true);
+          // fetch fresh copy too
+          const token = localStorage.getItem('token');
+          if (token) {
+            fetchUserProfile(token);
+          }
+        }} 
         onSignupClick={() => setAuthView('signup')} 
       />
     ) : (
@@ -611,11 +766,17 @@ function App() {
       <div className={`workspace ${isResizing ? 'is-resizing' : ''} ${isSidebarMenuOpen ? 'sidebar-menu-open' : ''}`}>
         <Allotment>
           {/* Fixed Sidebar */}
-          <Allotment.Pane preferredSize={70} minSize={70} maxSize={70}>
+          <Allotment.Pane 
+            preferredSize={isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft ? 0 : 70} 
+            minSize={isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft ? 0 : 70} 
+            maxSize={70}
+            visible={!(isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft)}
+          >
             <Sidebar 
               activeView={activeView}
               onViewChange={(view) => {
                 if (view === 'settings') {
+                  setSettingsCategory('general');
                   setIsSettingsOpen(true);
                 } else {
                   setActiveView(view);
@@ -623,7 +784,12 @@ function App() {
                 }
               }} 
               onMenuToggle={(isOpen) => setIsSidebarMenuOpen(isOpen)}
-              onLogout={() => setIsAuthenticated(false)}
+              onLogout={handleLogout}
+              userProfile={userProfile}
+              onProfileClick={() => {
+                setSettingsCategory('profile');
+                setIsSettingsOpen(true);
+              }}
             />
           </Allotment.Pane>
 
@@ -692,7 +858,22 @@ function App() {
         </Allotment>
       </div>
  
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => {
+          setIsSettingsOpen(false);
+          const token = localStorage.getItem('token');
+          if (token) {
+            fetchUserProfile(token);
+          }
+        }} 
+        userProfile={userProfile}
+        initialCategory={settingsCategory}
+        onProfileUpdate={(updatedUser) => {
+          setUserProfile(updatedUser);
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+        }}
+      />
       
       <UploadManager 
         uploads={uploads} 
@@ -749,7 +930,12 @@ function App() {
         }
         
 
-        /* High-quality smooth transitions for preview toggle */
+        /* High-quality smooth transitions for preview toggle and sidebar auto-hide */
+        .split-view-container > .split-view-view:first-child,
+        div[class*="splitViewContainer"] > div[class*="splitViewView"]:first-child {
+          transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
         .workspace.is-resizing :where(.split-view-view, div[class*="splitViewView"], .sash) {
           transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1) !important;
         }

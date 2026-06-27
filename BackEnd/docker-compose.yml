@@ -1,6 +1,7 @@
 version: '3.8'
-
+name: FileSphere-BackEnd
 services:
+  
   db:
     image: postgres:15-alpine
     container_name: filesphere_db
@@ -12,6 +13,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d filesphere"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - filesphere_network
 
@@ -29,13 +35,41 @@ services:
       - DB_NAME=filesphere
       - DB_PORT=5432
       - GIN_MODE=release
-      - ENCRYPTION_KEY=supersecret32bytekey123456789012
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       # Map the local storage directory to the container's storage path
       # This ensures uploaded files persist on your local machine
       - ./storage:/app/storage
+    networks:
+      - filesphere_network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: filesphere_auth
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_HOST=db
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=filesphere
+      - DB_PORT=5432
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - FACEBOOK_CLIENT_ID=${FACEBOOK_CLIENT_ID}
+      - FACEBOOK_CLIENT_SECRET=${FACEBOOK_CLIENT_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - filesphere_network
 

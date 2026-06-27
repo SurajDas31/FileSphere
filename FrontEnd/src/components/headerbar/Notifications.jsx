@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bell, FileText, Share2, Info, CheckCircle } from 'lucide-react';
 
-const Notifications = () => {
+const Notifications = ({ onViewAll }) => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef(null);
 
@@ -52,7 +52,12 @@ const Notifications = () => {
             ))}
           </div>
           <div className="notif-footer">
-            <button>View all notifications</button>
+            <button onClick={() => {
+              setIsNotifOpen(false);
+              if (onViewAll) onViewAll();
+            }}>
+              View all notifications
+            </button>
           </div>
         </div>
       )}

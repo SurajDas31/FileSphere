@@ -12,6 +12,7 @@ type Folder struct {
 	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
 	Name      string    `gorm:"not null" json:"name"`
 	ParentID  *uuid.UUID `gorm:"type:uuid" json:"parentId"`
+	TenantID  string     `gorm:"not null;index" json:"tenantId"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 
@@ -30,6 +31,7 @@ type File struct {
 	StoragePath string    `gorm:"not null;unique" json:"-"` // Hidden from JSON responses for security
 	Owner       string    `gorm:"default:'Admin'" json:"owner"` // Default owner for now
 	Tags        string    `gorm:"default:'none'" json:"tags"`
+	TenantID    string    `gorm:"not null;index" json:"tenantId"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }

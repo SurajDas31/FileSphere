@@ -5,17 +5,12 @@ import {
   Mail, Calendar, MessageSquare, GitBranch, ClipboardList
 } from 'lucide-react';
 
-const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout }) => {
+const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout, userProfile, onProfileClick }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAppsOpen, setIsAppsOpen] = useState(false);
   const [hasImageError, setHasImageError] = useState(false);
   const profileRef = useRef(null);
   const appsRef = useRef(null);
-
-  const user = {
-    name: 'Admin',
-    image: 'https://via.placeholder.com/32',
-  };
 
   const apps = [
     { id: 'workflow', label: 'Workflow', icon: <GitBranch size={20} />, color: '#6e8efb' },
@@ -24,6 +19,11 @@ const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout }) => {
     { id: 'calendar', label: 'Calendar', icon: <Calendar size={20} />, color: '#2ecc71' },
     { id: 'chat', label: 'Chat', icon: <MessageSquare size={20} />, color: '#f1c40f' },
   ];
+
+  // Reset profile image error state when user profile changes
+  useEffect(() => {
+    setHasImageError(false);
+  }, [userProfile]);
 
   // Notify parent of menu state changes to handle z-index
   useEffect(() => {
@@ -114,9 +114,9 @@ const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout }) => {
             onClick={() => setIsProfileOpen(!isProfileOpen)}
             title="Profile"
           >
-            {user.image && !hasImageError ? (
+            {userProfile?.profilePicPath && !hasImageError ? (
               <img 
-                src={user.image} 
+                src={userProfile.profilePicPath} 
                 alt="Profile" 
                 className="sidebar-profile-img" 
                 onError={() => setHasImageError(true)}
@@ -127,7 +127,15 @@ const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout }) => {
           </div>
           {isProfileOpen && (
             <div className="profile-menu solid-panel">
-              <div className="menu-item">
+              <div className="profile-summary-header" style={{ padding: '8px 12px', borderBottom: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-main)' }}>
+                  {userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Admin'}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {userProfile?.role || 'USER'}
+                </span>
+              </div>
+              <div className="menu-item" onClick={() => { setIsProfileOpen(false); if(onProfileClick) onProfileClick(); }}>
                 <User size={16} />
                 <span>My Profile</span>
               </div>

@@ -1,33 +1,78 @@
 import { useState } from 'react';
-import { Lock, User, Mail, UserPlus, ArrowLeft } from 'lucide-react';
+import { Lock, User, Mail, Phone, UserPlus, ArrowLeft } from 'lucide-react';
+import { config } from '../../config';
 
 const Signup = ({ onSignup, onBackToLogin }) => {
   const [formData, setFormData] = useState({
-    username: '',
+    firstName: '',
+    lastName: '',
     email: '',
+    mobileNo: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    joinTenantMode: 'join', // 'join' or 'create'
+    tenantId: '',
+    tenantName: ''
   });
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    // Dummy signup logic
-    console.log('Signup data:', formData);
-    onSignup();
+
+    setLoading(true);
+    try {
+      const signupUrl = `${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/signup`;
+      const res = await fetch(signupUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          mobileNo: formData.mobileNo,
+          password: formData.password,
+          joinTenantMode: formData.joinTenantMode,
+          tenantId: formData.tenantId,
+          tenantName: formData.tenantName
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setError('');
+        // Show success alert/message
+        const msg = data.message || 'Account created successfully! Redirecting to login page...';
+        setSuccessMsg(msg);
+        setTimeout(() => {
+          onBackToLogin();
+        }, 3000);
+      } else {
+        setError(data.error || 'Failed to create account');
+      }
+    } catch (err) {
+      console.error('Signup error', err);
+      setError('Connection refused. Is auth-service running?');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="login-container">
-      <div className="login-card glass-panel">
+      <div className="login-card glass-panel" style={{ maxWidth: '450px' }}>
         <div className="login-header">
           <div className="login-logo">
             <UserPlus size={32} color="var(--accent)" />
@@ -37,16 +82,29 @@ const Signup = ({ onSignup, onBackToLogin }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
-          <div className="input-group">
-            <User size={18} className="input-icon" />
-            <input
-              type="text"
-              name="username"
-              placeholder="Username"
-              value={formData.username}
-              onChange={handleChange}
-              required
-            />
+          <div style={{ display: 'flex', gap: '15px' }}>
+            <div className="input-group" style={{ flex: 1 }}>
+              <User size={18} className="input-icon" />
+              <input
+                type="text"
+                name="firstName"
+                placeholder="First Name"
+                value={formData.firstName}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="input-group" style={{ flex: 1 }}>
+              <User size={18} className="input-icon" />
+              <input
+                type="text"
+                name="lastName"
+                placeholder="Last Name"
+                value={formData.lastName}
+                onChange={handleChange}
+                required
+              />
+            </div>
           </div>
 
           <div className="input-group">
@@ -56,6 +114,18 @@ const Signup = ({ onSignup, onBackToLogin }) => {
               name="email"
               placeholder="Email Address"
               value={formData.email}
+              onChange={handleChange}
+              required
+            />
+          </div>
+
+          <div className="input-group">
+            <Phone size={18} className="input-icon" />
+            <input
+              type="text"
+              name="mobileNo"
+              placeholder="Mobile Number"
+              value={formData.mobileNo}
               onChange={handleChange}
               required
             />
@@ -85,10 +155,87 @@ const Signup = ({ onSignup, onBackToLogin }) => {
             />
           </div>
 
-          {error && <div className="login-error">{error}</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--glass-border)', padding: '15px', borderRadius: '16px', background: 'rgba(255,255,255,0.02)', boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.05)' }}>
+            <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Tenant Namespace Options</span>
+              <span style={{ color: '#e74c3c', fontSize: '11px' }}>* Required</span>
+            </label>
+            <div style={{ display: 'flex', gap: '20px', margin: '5px 0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-main)' }}>
+                <input 
+                  type="radio" 
+                  name="joinTenantMode" 
+                  value="join" 
+                  style={{ accentColor: 'var(--accent)' }}
+                  checked={formData.joinTenantMode === 'join'} 
+                  onChange={handleChange} 
+                />
+                Join Existing Tenant
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-main)' }}>
+                <input 
+                  type="radio" 
+                  name="joinTenantMode" 
+                  value="create" 
+                  style={{ accentColor: 'var(--accent)' }}
+                  checked={formData.joinTenantMode === 'create'} 
+                  onChange={handleChange} 
+                />
+                Create New Tenant
+              </label>
+            </div>
 
-          <button type="submit" className="login-button">
-            Create Account
+            {formData.joinTenantMode === 'join' ? (
+              <div style={{ position: 'relative', width: '100%' }}>
+                <input
+                  type="text"
+                  name="tenantId"
+                  placeholder="Enter Tenant ID (UUID Format) *"
+                  value={formData.tenantId}
+                  onChange={handleChange}
+                  style={{ 
+                    padding: '10px 14px', 
+                    background: 'rgba(255,255,255,0.05)', 
+                    border: '1.5px solid #e74c3c', 
+                    borderRadius: '12px', 
+                    color: 'var(--text-main)', 
+                    fontSize: '13px', 
+                    width: '100%', 
+                    marginTop: '5px',
+                    outline: 'none',
+                    boxShadow: '0 0 10px rgba(231, 76, 60, 0.1)'
+                  }}
+                  required
+                />
+              </div>
+            ) : (
+              <input
+                type="text"
+                name="tenantName"
+                placeholder="Enter new Tenant Name *"
+                value={formData.tenantName}
+                onChange={handleChange}
+                required
+                style={{ 
+                  padding: '10px 14px', 
+                  background: 'rgba(255,255,255,0.05)', 
+                  border: '1px solid var(--glass-border)', 
+                  borderRadius: '12px', 
+                  color: 'var(--text-main)', 
+                  fontSize: '13px', 
+                  width: '100%', 
+                  marginTop: '5px',
+                  outline: 'none'
+                }}
+              />
+            )}
+          </div>
+
+          {error && <div className="login-error">{error}</div>}
+          {successMsg && <div className="login-success" style={{ color: '#2ecc71', background: 'rgba(46, 204, 113, 0.1)', padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(46, 204, 113, 0.2)', fontSize: '13px', textAlign: 'center', marginTop: '10px' }}>{successMsg}</div>}
+
+          <button type="submit" className="login-button" disabled={loading}>
+            {loading ? 'Creating Account...' : 'Create Account'}
           </button>
         </form>
 

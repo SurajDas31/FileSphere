@@ -82,12 +82,18 @@ body {
 }
 
 /* Redefining panels and tables under Glassmorphic theme */
+body.glassmorphic-ui .glass-panel,
 body.glassmorphic-ui .solid-panel,
 body.glassmorphic-ui .document-viewer,
 body.glassmorphic-ui .pdf-viewer-container,
-body.glassmorphic-ui .upload-manager {
-  backdrop-filter: var(--glass-blur) !important;
-  -webkit-backdrop-filter: var(--glass-blur) !important;
+body.glassmorphic-ui .upload-manager,
+body.glassmorphic-ui .sidebar,
+body.glassmorphic-ui .header,
+body.glassmorphic-ui .repository-container,
+body.glassmorphic-ui .file-list-container,
+body.glassmorphic-ui .file-properties-container {
+  backdrop-filter: blur(25px) !important;
+  -webkit-backdrop-filter: blur(25px) !important;
   background: var(--glass-bg) !important;
   border-color: var(--glass-border) !important;
   box-shadow: var(--glass-glow), 0 8px 32px 0 rgba(31, 38, 135, 0.08) !important;

@@ -56,7 +56,7 @@ const FileList = ({
       return;
     }
     try {
-      const res = await fetch(`${config.API_BASE_URL}/api/files/${fileId}`, {
+      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/${fileId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editingTitle.trim() })

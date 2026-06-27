@@ -5,6 +5,7 @@ import (
 
 	"filesphere-api/controllers"
 	"filesphere-api/database"
+	"filesphere-api/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,6 +29,7 @@ func main() {
 	})
 
 	api := r.Group("/api")
+	api.Use(middleware.JWTAuthMiddleware())
 	{
 		// Folder routes
 		api.POST("/folders", controllers.CreateFolder)
@@ -35,6 +37,8 @@ func main() {
 		api.GET("/folders/:id", controllers.GetFolderByID)
 		api.PUT("/folders/:id", controllers.UpdateFolder)
 		api.DELETE("/folders/:id", controllers.DeleteFolder)
+		api.POST("/folders/:id/copy", controllers.CopyFolder)
+		api.PUT("/folders/:id/move", controllers.MoveFolder)
 
 		// File routes
 		api.POST("/files", controllers.UploadFile) // Kept for simple uploads if needed

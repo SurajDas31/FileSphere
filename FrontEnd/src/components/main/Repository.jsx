@@ -96,7 +96,7 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
   const [creatingNodeParentId, setCreatingNodeParentId] = useState(null);
 
   const fetchFolders = useCallback(() => {
-    fetch(`${config.API_BASE_URL}/api/folders`)
+    fetch(`${config.FILE_API_BASE_URL || ''}/api/folders`)
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data)) {
@@ -132,7 +132,7 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
     if (!name || name.trim() === '') return;
 
     try {
-      const res = await fetch(`${config.API_BASE_URL}/api/folders`, {
+      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), parentId: parentId })
@@ -157,7 +157,7 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
 
   const handleRenameFolder = async (id, newName) => {
     try {
-      const res = await fetch(`${config.API_BASE_URL}/api/folders/${id}`, {
+      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName })
@@ -183,7 +183,7 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
     const { id, name } = deleteModal;
     setDeleteModal({ isOpen: false, id: null, name: '' });
     try {
-      const res = await fetch(`${config.API_BASE_URL}/api/folders/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders/${id}`, { method: 'DELETE' });
       if (res.ok) {
         fetchFolders();
         if (selectedFolderId === id) {
@@ -427,6 +427,12 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
             onFileDrop([dragData.id], dragData.title, node.id, node.label);
           }
         }
+      } else if (dragData.type === 'folder') {
+        if (dragData.id === node.id) return; // Cannot drop onto itself
+        if (onFileDrop) {
+          // Pass the dragData type inside file drop so App.jsx knows it's a folder copy/move
+          onFileDrop([dragData.id], `Folder: ${dragData.label}`, node.id, node.label, 'folder');
+        }
       }
     } catch (err) {
       console.error("Error drop file", err);
@@ -500,6 +506,17 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
         }}
         onDoubleClick={() => {
           if (!isEditing) setIsOpen(!isOpen);
+        }}
+        draggable={node.type === 'folder' ? 'true' : 'false'}
+        onDragStart={(e) => {
+          if (node.type === 'folder') {
+            e.dataTransfer.setData("application/json", JSON.stringify({
+              type: 'folder',
+              id: node.id,
+              label: node.label
+            }));
+            e.dataTransfer.effectAllowed = "copyMove";
+          }
         }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}

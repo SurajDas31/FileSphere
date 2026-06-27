@@ -22,6 +22,18 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/proxy/, ''),
         secure: false,
       },
+      '/api/auth': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/oauth2': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/login/oauth2': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
       // Proxy all other /api calls to the Go backend
       '/api': {
         target: 'http://localhost:8080',

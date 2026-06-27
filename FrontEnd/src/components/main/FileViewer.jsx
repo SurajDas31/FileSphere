@@ -44,7 +44,7 @@ const FileViewer = ({ data }) => {
     const fileTitle = data?.title;
     if (fileId && fileTitle && getFileType(fileTitle) === 'video') {
       return () => {
-        fetch(`${config.API_BASE_URL}/api/files/${fileId}/preview`, {
+        fetch(`${config.FILE_API_BASE_URL || ''}/api/files/${fileId}/preview`, {
           method: 'DELETE',
           keepalive: true
         }).catch(err => {
@@ -189,7 +189,7 @@ const FileViewer = ({ data }) => {
     
     // The backend provides a specific endpoint that forces a download attachment
     // We can trigger this by creating a temporary anchor element
-    const downloadUrl = `${config.API_BASE_URL}/api/files/${data.id}/download`;
+    const downloadUrl = `${config.FILE_API_BASE_URL || ''}/api/files/${data.id}/download`;
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = data.title; // Provide a fallback filename

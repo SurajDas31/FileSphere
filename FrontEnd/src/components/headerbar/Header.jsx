@@ -2,14 +2,25 @@ import { useState } from 'react';
 import { Search, Moon, Sun } from 'lucide-react';
 import Notifications from './Notifications';
 
-const Header = () => {
-  const [isDarkMode, setIsDarkMode] = useState(() => 
-    document.body.classList.contains('dark-mode')
-  );
+const Header = ({ onViewAllNotifications }) => {
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const cached = localStorage.getItem('theme_dark_mode');
+    if (cached !== null) {
+      if (cached === 'true') {
+        document.body.classList.add('dark-mode');
+        return true;
+      } else {
+        document.body.classList.remove('dark-mode');
+        return false;
+      }
+    }
+    return document.body.classList.contains('dark-mode');
+  });
 
   const toggleDarkMode = () => {
     const newValue = !isDarkMode;
     setIsDarkMode(newValue);
+    localStorage.setItem('theme_dark_mode', String(newValue));
     if (newValue) {
       document.body.classList.add('dark-mode');
     } else {
@@ -72,7 +83,7 @@ const Header = () => {
       </div>
 
       <div className="header-right">
-        <Notifications />
+        <Notifications onViewAll={onViewAllNotifications} />
 
         <button className="header-btn" onClick={toggleDarkMode} title={isDarkMode ? "Light Mode" : "Dark Mode"}>
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}

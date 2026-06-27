@@ -38,7 +38,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
         formData.append('uploadId', uploadId);
         formData.append('chunkIndex', currentChunk.toString());
 
-        const res = await fetch('/api/files/chunk', {
+        const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/chunk`, {
           method: 'POST',
           body: formData,
         });
@@ -54,7 +54,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
       }
 
       // All chunks uploaded, signal completion
-      const completeRes = await fetch('/api/files/complete', {
+      const completeRes = await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -129,7 +129,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
     const upload = uploads.find(u => u.id === id);
     if (upload && ['uploading', 'paused', 'error'].includes(upload.status)) {
       try {
-        await fetch(`${config.API_BASE_URL}/api/files/cancel/${upload.uploadId}`, { method: 'DELETE' });
+        await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/cancel/${upload.uploadId}`, { method: 'DELETE' });
       } catch (err) {
         console.error("Failed to cancel upload on backend", err);
       }
@@ -162,7 +162,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
                 pausedUploads.current.add(u.id);
                 if (['uploading', 'paused', 'error'].includes(u.status)) {
                   try {
-                    await fetch(`${config.API_BASE_URL}/api/files/cancel/${u.uploadId}`, { method: 'DELETE' });
+                    await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/cancel/${u.uploadId}`, { method: 'DELETE' });
                   } catch { /* ignore */ }
                 }
               });

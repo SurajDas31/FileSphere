@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"filesphere-api/database"
+	"filesphere-api/middleware"
 	"filesphere-api/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -79,6 +80,19 @@ func UploadChunk(c *gin.Context) {
 
 // CompleteUpload handles POST /api/files/complete
 func CompleteUpload(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
+	firstName, _ := middleware.GetUserFirstName(c)
+	lastName, _ := middleware.GetUserLastName(c)
+	uploaderName := "Admin"
+	if firstName != "" || lastName != "" {
+		uploaderName = strings.TrimSpace(fmt.Sprintf("%s %s", firstName, lastName))
+	}
+
 	var input struct {
 		UploadID    string `json:"uploadId" binding:"required"`
 		Filename    string `json:"filename" binding:"required"`
@@ -92,9 +106,23 @@ func CompleteUpload(c *gin.Context) {
 		return
 	}
 
+	// 50 MB limits (52428800 bytes)
+	const MaxTenantFileSize = 52428800
+	if input.Size > MaxTenantFileSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": fmt.Sprintf("File size exceeds the tenant upload limitation of %d MB", MaxTenantFileSize / 1024 / 1024)})
+		return
+	}
+
 	folderUUID, err := uuid.Parse(input.FolderID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid folderId"})
+		return
+	}
+
+	// Validate folder belongs to tenant
+	var folder models.Folder
+	if err := database.DB.Where("id = ? AND tenant_id = ?", folderUUID, tenantID).First(&folder).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Target folder does not belong to this tenant"})
 		return
 	}
 
@@ -154,13 +182,29 @@ func CompleteUpload(c *gin.Context) {
 	}
 
 	if err := gzWriter.Close(); err != nil {
+		finalFile.Close()
 		os.Remove(finalDst)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to finalize compression"})
 		return
 	}
+	finalFile.Close()
 
 	// Clean up temp directory
 	os.RemoveAll(uploadDir)
+
+	// Run StorageService Put operation to transfer the file to FTP (or keep it local if LOCAL mode)
+	storageSvc := GetStorageService()
+	actualStoragePath, err := storageSvc.Put(c.Request.Context(), finalDst, internalName)
+	if err != nil {
+		os.Remove(finalDst)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to transfer file to remote storage: " + err.Error()})
+		return
+	}
+
+	// Clean up local temp compiled file if stored remotely
+	if actualStoragePath != finalDst {
+		os.Remove(finalDst)
+	}
 
 	// Determine type
 	docType := "unknown"
@@ -182,11 +226,13 @@ func CompleteUpload(c *gin.Context) {
 		Title:       input.Filename,
 		Type:        docType,
 		Size:        input.Size, // Store original unencrypted size
-		StoragePath: finalDst,
+		StoragePath: actualStoragePath,
+		Owner:       uploaderName,
+		TenantID:    tenantID,
 	}
 
 	if err := database.DB.Create(&fileRecord).Error; err != nil {
-		os.Remove(finalDst)
+		_ = storageSvc.Delete(c.Request.Context(), actualStoragePath)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file metadata"})
 		return
 	}
@@ -215,10 +261,30 @@ func CancelUpload(c *gin.Context) {
 
 // UploadFile handles POST /api/files (High Throughput Upload)
 func UploadFile(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
+	firstName, _ := middleware.GetUserFirstName(c)
+	lastName, _ := middleware.GetUserLastName(c)
+	uploaderName := "Admin"
+	if firstName != "" || lastName != "" {
+		uploaderName = strings.TrimSpace(fmt.Sprintf("%s %s", firstName, lastName))
+	}
+
 	folderIDStr := c.PostForm("folderId")
 	folderID, err := uuid.Parse(folderIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or missing folderId"})
+		return
+	}
+
+	// Validate folder belongs to tenant
+	var folder models.Folder
+	if err := database.DB.Where("id = ? AND tenant_id = ?", folderID, tenantID).First(&folder).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Target folder does not belong to this tenant"})
 		return
 	}
 
@@ -285,6 +351,8 @@ func UploadFile(c *gin.Context) {
 		Type:        docType,
 		Size:        fileHeader.Size,
 		StoragePath: dst,
+		Owner:       uploaderName,
+		TenantID:    tenantID,
 	}
 
 	if err := database.DB.Create(&fileRecord).Error; err != nil {
@@ -298,17 +366,25 @@ func UploadFile(c *gin.Context) {
 
 // DownloadFile handles GET /api/files/:id/download (As Attachment)
 func DownloadFile(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
 	id := c.Param("id")
 	var file models.File
 
-	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+	if err := database.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
 
-	fileObj, err := os.Open(file.StoragePath)
+	// Get content using active StorageService (e.g. LOCAL or FTP)
+	storageSvc := GetStorageService()
+	fileObj, err := storageSvc.Get(c.Request.Context(), file.StoragePath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not access file on disk"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not access file in storage: " + err.Error()})
 		return
 	}
 	defer fileObj.Close()
@@ -354,10 +430,16 @@ func DownloadFile(c *gin.Context) {
 
 // StreamFile handles GET /api/files/:id/content (Inline for Preview)
 func StreamFile(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
 	id := c.Param("id")
 	var file models.File
 
-	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+	if err := database.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
@@ -367,9 +449,11 @@ func StreamFile(c *gin.Context) {
 
 	// Check if we need to create the decrypted temp file
 	if _, err := os.Stat(tempDecryptedPath); os.IsNotExist(err) {
-		fileObj, err := os.Open(file.StoragePath)
+		// Get content using active StorageService (e.g. LOCAL or FTP)
+		storageSvc := GetStorageService()
+		fileObj, err := storageSvc.Get(c.Request.Context(), file.StoragePath)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not access file on disk"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not access file in storage: " + err.Error()})
 			return
 		}
 		defer fileObj.Close()
@@ -443,10 +527,16 @@ func StreamFile(c *gin.Context) {
 
 // CleanupPreviewFile handles DELETE /api/files/:id/preview
 func CleanupPreviewFile(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
 	id := c.Param("id")
 	var file models.File
 
-	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+	if err := database.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
@@ -454,17 +544,17 @@ func CleanupPreviewFile(c *gin.Context) {
 	// Clean up temporary decrypted buffer if it exists
 	tempDecryptedPath := filepath.Join(TempStoragePath, fmt.Sprintf("stream_%s", file.ID.String()))
 	
-	var err error
+	var removalErr error
 	for i := 0; i < 5; i++ {
-		err = os.Remove(tempDecryptedPath)
-		if err == nil || os.IsNotExist(err) {
+		removalErr = os.Remove(tempDecryptedPath)
+		if removalErr == nil || os.IsNotExist(removalErr) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if err != nil && !os.IsNotExist(err) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete stream buffer: %v", err)})
+	if removalErr != nil && !os.IsNotExist(removalErr) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete stream buffer: %v", removalErr)})
 		return
 	}
 
@@ -473,16 +563,23 @@ func CleanupPreviewFile(c *gin.Context) {
 
 // DeleteFile handles DELETE /api/files/:id
 func DeleteFile(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
 	id := c.Param("id")
 	var file models.File
 
-	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+	if err := database.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
 
-	if err := os.Remove(file.StoragePath); err != nil && !os.IsNotExist(err) {
-		fmt.Printf("Warning: Failed to delete physical file %s: %v\n", file.StoragePath, err)
+	storageSvc := GetStorageService()
+	if err := storageSvc.Delete(c.Request.Context(), file.StoragePath); err != nil {
+		fmt.Printf("Warning: Failed to delete storage file %s: %v\n", file.StoragePath, err)
 	}
 
 	// Clean up temporary decrypted buffer if it exists
@@ -501,10 +598,16 @@ func DeleteFile(c *gin.Context) {
 
 // UpdateFile handles PUT /api/files/:id
 func UpdateFile(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
 	id := c.Param("id")
 	var file models.File
 
-	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+	if err := database.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
@@ -523,6 +626,12 @@ func UpdateFile(c *gin.Context) {
 		file.Title = *input.Title
 	}
 	if input.FolderID != nil {
+		// Verify destination folder belongs to same tenant
+		var destFolder models.Folder
+		if err := database.DB.Where("id = ? AND tenant_id = ?", *input.FolderID, tenantID).First(&destFolder).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Target folder does not belong to this tenant"})
+			return
+		}
 		file.FolderID = *input.FolderID
 	}
 
@@ -536,10 +645,16 @@ func UpdateFile(c *gin.Context) {
 
 // CopyFile handles POST /api/files/:id/copy
 func CopyFile(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
 	id := c.Param("id")
 	var file models.File
 
-	if err := database.DB.First(&file, "id = ?", id).Error; err != nil {
+	if err := database.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
@@ -553,31 +668,56 @@ func CopyFile(c *gin.Context) {
 		return
 	}
 
+	// Verify destination folder belongs to same tenant
+	var destFolder models.Folder
+	if err := database.DB.Where("id = ? AND tenant_id = ?", input.FolderID, tenantID).First(&destFolder).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Target folder does not belong to this tenant"})
+		return
+	}
+
 	// Generate new ID and storage path for copied file
 	newFileID := uuid.New()
 	extension := filepath.Ext(file.Title)
 	newInternalName := fmt.Sprintf("%s%s", newFileID.String(), extension)
-	newStoragePath := filepath.Join(StoragePath, newInternalName)
 
-	// Copy physical file
-	srcFile, err := os.Open(file.StoragePath)
+	// Get active StorageService
+	storageSvc := GetStorageService()
+
+	// Download source from storage
+	srcStream, err := storageSvc.Get(c.Request.Context(), file.StoragePath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open source file"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve source file: " + err.Error()})
 		return
 	}
-	defer srcFile.Close()
+	defer srcStream.Close()
 
-	destFile, err := os.Create(newStoragePath)
+	// Create a temporary local file to hold duplicate stream before storage transfer
+	tempLocalPath := filepath.Join(StoragePath, newInternalName)
+	tempFile, err := os.Create(tempLocalPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create destination file"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create temp copy path"})
 		return
 	}
-	defer destFile.Close()
 
-	if _, err := io.Copy(destFile, srcFile); err != nil {
-		os.Remove(newStoragePath)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to copy physical file data"})
+	if _, err := io.Copy(tempFile, srcStream); err != nil {
+		tempFile.Close()
+		os.Remove(tempLocalPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write copy buffer"})
 		return
+	}
+	tempFile.Close()
+
+	// Transfer file to active Storage engine (e.g. FTP or local)
+	actualStoragePath, err := storageSvc.Put(c.Request.Context(), tempLocalPath, newInternalName)
+	if err != nil {
+		os.Remove(tempLocalPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store copy in target storage: " + err.Error()})
+		return
+	}
+
+	// Clean up temp file if stored remotely
+	if actualStoragePath != tempLocalPath {
+		os.Remove(tempLocalPath)
 	}
 
 	// Create new File database record
@@ -587,13 +727,14 @@ func CopyFile(c *gin.Context) {
 		Title:       file.Title,
 		Type:        file.Type,
 		Size:        file.Size,
-		StoragePath: newStoragePath,
+		StoragePath: actualStoragePath,
 		Owner:       file.Owner,
 		Tags:        file.Tags,
+		TenantID:    tenantID,
 	}
 
 	if err := database.DB.Create(&copiedFile).Error; err != nil {
-		os.Remove(newStoragePath)
+		_ = storageSvc.Delete(c.Request.Context(), actualStoragePath)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create copied file metadata"})
 		return
 	}
