@@ -29,7 +29,7 @@ import java.util.List;
 public class SecurityConfig {
 
     @Autowired
-    private JwtAuthenticationFilter jwtAuthFilter;
+    private GatewayAuthenticationFilter gatewayAuthFilter;
 
     @Autowired
     private UserDetailsService userDetailsService;
@@ -51,7 +51,7 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(gatewayAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .oauth2Login(oauth2 -> oauth2
                 .successHandler(oAuth2SuccessHandler)
             );

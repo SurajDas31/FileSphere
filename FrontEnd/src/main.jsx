@@ -20,7 +20,16 @@ window.fetch = async (url, options = {}) => {
       options.headers['Authorization'] = `Bearer ${token}`;
     }
   }
-  return originalFetch(url, options);
+  try {
+    const response = await originalFetch(url, options);
+    const urlStr = typeof url === 'string' ? url : (url.url || '');
+    if (response.status === 401 && !urlStr.includes('/api/auth/login') && !urlStr.includes('/api/auth/signup')) {
+      window.dispatchEvent(new Event('unauthorized-api-call'));
+    }
+    return response;
+  } catch (error) {
+    throw error;
+  }
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(

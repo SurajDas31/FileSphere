@@ -106,10 +106,19 @@ func CompleteUpload(c *gin.Context) {
 		return
 	}
 
-	// 50 MB limits (52428800 bytes)
-	const MaxTenantFileSize = 52428800
-	if input.Size > MaxTenantFileSize {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": fmt.Sprintf("File size exceeds the tenant upload limitation of %d MB", MaxTenantFileSize / 1024 / 1024)})
+	// Load the limit dynamically from the database tenants table
+	var maxFileSize int64 = 52428800 // Default to 50MB
+	type DBTenant struct {
+		TenantKey        int64  `gorm:"column:tenant_key"`
+		MaxFileSizeBytes *int64 `gorm:"column:max_file_size_bytes"`
+	}
+	var dbTenant DBTenant
+	if err := database.DB.Table("tenants").Where("tenant_key = ?", tenantID).First(&dbTenant).Error; err == nil && dbTenant.MaxFileSizeBytes != nil {
+		maxFileSize = *dbTenant.MaxFileSizeBytes
+	}
+
+	if input.Size > maxFileSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": fmt.Sprintf("File size exceeds the tenant upload limitation of %d MB", maxFileSize / 1024 / 1024)})
 		return
 	}
 
@@ -217,6 +226,7 @@ func CompleteUpload(c *gin.Context) {
 	case ".mp4", ".webm", ".ogg", ".mov", ".avi": docType = "video"
 	case ".zip", ".rar": docType = "zip"
 	case ".txt", ".md", ".csv": docType = "text"
+	case ".html", ".htm": docType = "html"
 	}
 
 	// Save to DB
@@ -342,6 +352,7 @@ func UploadFile(c *gin.Context) {
 	case ".mp4", ".webm", ".ogg", ".mov", ".avi": docType = "video"
 	case ".zip", ".rar": docType = "zip"
 	case ".txt", ".md", ".csv": docType = "text"
+	case ".html", ".htm": docType = "html"
 	}
 
 	fileRecord := models.File{
@@ -413,10 +424,7 @@ func DownloadFile(c *gin.Context) {
 	}
 	defer gzReader.Close()
 
-	contentType := mime.TypeByExtension(filepath.Ext(file.Title))
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	contentType := getMimeType(file.Title)
 
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.Title))
 	c.Header("Content-Type", contentType)
@@ -512,10 +520,7 @@ func StreamFile(c *gin.Context) {
 		return
 	}
 
-	contentType := mime.TypeByExtension(filepath.Ext(file.Title))
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	contentType := getMimeType(file.Title)
 
 	// Set headers
 	c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, file.Title))
@@ -740,4 +745,46 @@ func CopyFile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, copiedFile)
+}
+
+func getMimeType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	contentType := mime.TypeByExtension(ext)
+	if contentType != "" {
+		return contentType
+	}
+	switch ext {
+	case ".mp4":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	case ".ogg":
+		return "video/ogg"
+	case ".mov":
+		return "video/quicktime"
+	case ".avi":
+		return "video/x-msvideo"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".webp":
+		return "image/webp"
+	case ".pdf":
+		return "application/pdf"
+	case ".txt":
+		return "text/plain"
+	case ".md":
+		return "text/markdown"
+	case ".csv":
+		return "text/csv"
+	case ".html", ".htm":
+		return "text/html"
+	default:
+		return "application/octet-stream"
+	}
 }

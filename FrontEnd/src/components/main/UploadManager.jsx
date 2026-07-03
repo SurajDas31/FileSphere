@@ -4,17 +4,18 @@ import { config } from '../../config';
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
 
-const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
+const UploadManager = ({ uploads, setUploads, onUploadComplete, onUploadError }) => {
   const [isOpen, setIsOpen] = useState(true);
   const activeTasks = useRef(new Map());
-  
+
   // Mutable ref to instantly track paused uploads without waiting for React state cycles
   const pausedUploads = useRef(new Set());
 
   // Function to handle the actual chunking logic
   const processUpload = useCallback(async (upload) => {
+
     const { id, file, targetFolderId, uploadedChunks, totalChunks, uploadId } = upload;
-    
+
     // Safety check
     if (upload.status === 'paused' || upload.status === 'completed' || upload.status === 'error') {
       return;
@@ -22,7 +23,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
 
     try {
       let currentChunk = uploadedChunks;
-      
+
       while (currentChunk < totalChunks) {
         // Double check if pause was clicked during this loop using the mutable ref
         if (pausedUploads.current.has(id)) {
@@ -38,7 +39,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
         formData.append('uploadId', uploadId);
         formData.append('chunkIndex', currentChunk.toString());
 
-        const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/chunk`, {
+        const res = await fetch(`${config.API_BASE_URL || ''}/api/files/chunk`, {
           method: 'POST',
           body: formData,
         });
@@ -46,15 +47,15 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
         if (!res.ok) throw new Error('Chunk upload failed');
 
         currentChunk++;
-        
+
         // Update state to show progress visually
-        setUploads(prev => prev.map(u => 
+        setUploads(prev => prev.map(u =>
           u.id === id ? { ...u, uploadedChunks: currentChunk } : u
         ));
       }
 
       // All chunks uploaded, signal completion
-      const completeRes = await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/complete`, {
+      const completeRes = await fetch(`${config.API_BASE_URL || ''}/api/files/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,19 +67,23 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
         })
       });
 
-      if (!completeRes.ok) throw new Error('Completion failed');
-
       const completedFile = await completeRes.json();
-      
-      setUploads(prev => prev.map(u => 
+
+      if (!completeRes.ok) {
+        onUploadError(completedFile.error);
+        throw new Error('Completion failed');
+      }
+
+
+      setUploads(prev => prev.map(u =>
         u.id === id ? { ...u, status: 'completed' } : u
       ));
-      
+
       onUploadComplete(completedFile, targetFolderId);
 
     } catch (error) {
       console.error('Upload Error:', error);
-      setUploads(prev => prev.map(u => 
+      setUploads(prev => prev.map(u =>
         u.id === id ? { ...u, status: 'error', error: error.message } : u
       ));
     }
@@ -92,7 +97,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
         pausedUploads.current.delete(upload.id); // Ensure it's not marked paused
         const promise = processUpload(upload);
         activeTasks.current.set(upload.id, promise);
-        
+
         // Cleanup tracking when done (success or error or pause)
         promise.finally(() => {
           activeTasks.current.delete(upload.id);
@@ -105,17 +110,17 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
     setUploads(prev => prev.map(u => {
       if (u.id === id) {
         const isCurrentlyUploading = u.status === 'uploading';
-        
+
         // Immediately update the mutable ref for the chunking loop to catch
         if (isCurrentlyUploading) {
           pausedUploads.current.add(id);
         } else {
           pausedUploads.current.delete(id);
         }
-        
-        return { 
-          ...u, 
-          status: isCurrentlyUploading ? 'paused' : 'uploading' 
+
+        return {
+          ...u,
+          status: isCurrentlyUploading ? 'paused' : 'uploading'
         };
       }
       return u;
@@ -129,7 +134,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
     const upload = uploads.find(u => u.id === id);
     if (upload && ['uploading', 'paused', 'error'].includes(upload.status)) {
       try {
-        await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/cancel/${upload.uploadId}`, { method: 'DELETE' });
+        await fetch(`${config.API_BASE_URL || ''}/api/files/cancel/${upload.uploadId}`, { method: 'DELETE' });
       } catch (err) {
         console.error("Failed to cancel upload on backend", err);
       }
@@ -148,25 +153,25 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
           <span>Uploads ({uploads.filter(u => u.status === 'uploading').length} active)</span>
         </div>
         <div className="header-actions" onClick={(e) => e.stopPropagation()}>
-          <button 
-            className="minimize-manager-btn" 
+          <button
+            className="minimize-manager-btn"
             onClick={() => setIsOpen(!isOpen)}
             title={isOpen ? "Minimize" : "Expand"}
           >
             {isOpen ? <Minus size={16} /> : <ChevronUp size={16} />}
           </button>
-          <button 
-            className="close-manager-btn" 
-            onClick={() => { 
+          <button
+            className="close-manager-btn"
+            onClick={() => {
               uploads.forEach(async u => {
                 pausedUploads.current.add(u.id);
                 if (['uploading', 'paused', 'error'].includes(u.status)) {
                   try {
-                    await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/cancel/${u.uploadId}`, { method: 'DELETE' });
+                    await fetch(`${config.API_BASE_URL || ''}/api/files/cancel/${u.uploadId}`, { method: 'DELETE' });
                   } catch { /* ignore */ }
                 }
               });
-              setUploads([]); 
+              setUploads([]);
             }}
             title="Cancel all and close"
           >
@@ -179,7 +184,7 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
         <div className="upload-list">
           {uploads.map(upload => {
             const progress = Math.round((upload.uploadedChunks / upload.totalChunks) * 100) || 0;
-            
+
             return (
               <div key={upload.id} className="upload-item">
                 <div className="upload-item-header">
@@ -195,19 +200,19 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="progress-container">
-                  <div 
-                    className={`progress-bar ${upload.status}`} 
+                  <div
+                    className={`progress-bar ${upload.status}`}
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                
+
                 <div className="upload-status-text">
                   {upload.status === 'uploading' && <span>Uploading {progress}%</span>}
                   {upload.status === 'paused' && <span>Paused</span>}
-                  {upload.status === 'completed' && <span className="success"><CheckCircle2 size={12}/> Completed</span>}
-                  {upload.status === 'error' && <span className="error"><AlertCircle size={12}/> Failed</span>}
+                  {upload.status === 'completed' && <span className="success"><CheckCircle2 size={12} /> Completed</span>}
+                  {upload.status === 'error' && <span className="error"><AlertCircle size={12} /> Failed</span>}
                 </div>
               </div>
             );
@@ -215,7 +220,8 @@ const UploadManager = ({ uploads, setUploads, onUploadComplete }) => {
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .upload-manager {
           position: fixed;
           bottom: 20px;

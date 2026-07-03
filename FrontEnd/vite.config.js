@@ -23,20 +23,20 @@ export default defineConfig({
         secure: false,
       },
       '/api/auth': {
-        target: 'http://localhost:8081',
+        target: 'http://localhost:7000',
         changeOrigin: true,
       },
       '/oauth2': {
-        target: 'http://localhost:8081',
+        target: 'http://localhost:7000',
         changeOrigin: true,
       },
       '/login/oauth2': {
-        target: 'http://localhost:8081',
+        target: 'http://localhost:7000',
         changeOrigin: true,
       },
       // Proxy all other /api calls to the Go backend
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:7000',
         changeOrigin: true,
       }
     }

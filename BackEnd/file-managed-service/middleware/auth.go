@@ -2,83 +2,31 @@ package middleware
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
-
-var jwtSecret []byte
-
-func init() {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		// Fallback for development matching Spring Boot default
-		secret = "supersecretjwtkeywithatleast256bitscharacterslengthrequired1234567890!"
-	}
-	jwtSecret = []byte(secret)
-}
 
 func JWTAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+		email := c.GetHeader("X-User-Email")
+		if email == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "X-User-Email header is required"})
 			c.Abort()
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header must be Bearer token"})
-			c.Abort()
-			return
-		}
-
-		tokenString := parts[1]
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return jwtSecret, nil
-		})
-
-		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("Invalid or expired token: %v", err)})
-			c.Abort()
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to parse claims"})
-			c.Abort()
-			return
-		}
-
-		// Extract subject (email)
-		sub, err := claims.GetSubject()
-		if err != nil || sub == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Subject claim is missing"})
-			c.Abort()
-			return
-		}
-
-		// Store email and role in Context for routing controllers if needed
-		c.Set("userEmail", sub)
-		if role, ok := claims["role"].(string); ok {
+		c.Set("userEmail", email)
+		if role := c.GetHeader("X-User-Role"); role != "" {
 			c.Set("userRole", role)
 		}
-		if tenant, ok := claims["tenantId"].(string); ok {
+		if tenant := c.GetHeader("X-Tenant-Id"); tenant != "" {
 			c.Set("tenantId", tenant)
 		}
-		if fName, ok := claims["firstName"].(string); ok {
+		if fName := c.GetHeader("X-User-First-Name"); fName != "" {
 			c.Set("firstName", fName)
 		}
-		if lName, ok := claims["lastName"].(string); ok {
+		if lName := c.GetHeader("X-User-Last-Name"); lName != "" {
 			c.Set("lastName", lName)
 		}
 

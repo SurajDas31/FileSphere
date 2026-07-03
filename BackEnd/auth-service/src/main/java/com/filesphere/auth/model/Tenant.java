@@ -16,12 +16,22 @@ public class Tenant {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "max_file_size_bytes")
+    private Long maxFileSizeBytes = 52428800L; // Default 50MB
+
     public Tenant() {}
 
     public Tenant(UUID id, String name, Long tenantKey) {
         this.id = id;
         this.name = name;
         this.tenantKey = tenantKey;
+    }
+
+    public Tenant(UUID id, String name, Long tenantKey, Long maxFileSizeBytes) {
+        this.id = id;
+        this.name = name;
+        this.tenantKey = tenantKey;
+        this.maxFileSizeBytes = maxFileSizeBytes;
     }
 
     public UUID getId() {
@@ -46,5 +56,13 @@ public class Tenant {
 
     public void setTenantKey(Long tenantKey) {
         this.tenantKey = tenantKey;
+    }
+
+    public Long getMaxFileSizeBytes() {
+        return maxFileSizeBytes;
+    }
+
+    public void setMaxFileSizeBytes(Long maxFileSizeBytes) {
+        this.maxFileSizeBytes = maxFileSizeBytes;
     }
 }

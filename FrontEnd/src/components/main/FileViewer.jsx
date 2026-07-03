@@ -1,10 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import PdfViewer from './PdfViewer';
-import { 
-  FileSearch, 
-  Download, 
-  Printer, 
-  Maximize2, 
+import {
+  FileSearch,
+  Download,
+  Printer,
+  Maximize2,
   Minimize2,
   FileText,
   Archive,
@@ -22,7 +22,31 @@ const getFileType = (filename) => {
   if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) return 'video';
   if (['zip', 'rar'].includes(ext)) return 'zip';
   if (['txt', 'md', 'csv'].includes(ext)) return 'text';
+  if (['html', 'htm'].includes(ext)) return 'html';
   return 'unknown';
+};
+
+const getMimeType = (filename) => {
+  if (!filename) return 'application/octet-stream';
+  const ext = filename.split('.').pop().toLowerCase();
+  switch (ext) {
+    case 'pdf': return 'application/pdf';
+    case 'png': return 'image/png';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'gif': return 'image/gif';
+    case 'svg': return 'image/svg+xml';
+    case 'webp': return 'image/webp';
+    case 'mp4': return 'video/mp4';
+    case 'webm': return 'video/webm';
+    case 'ogg': return 'video/ogg';
+    case 'mov': return 'video/quicktime';
+    case 'avi': return 'video/x-msvideo';
+    case 'txt': return 'text/plain';
+    case 'md': return 'text/markdown';
+    case 'csv': return 'text/csv';
+    default: return 'application/octet-stream';
+  }
 };
 
 const FileViewer = ({ data }) => {
@@ -39,20 +63,13 @@ const FileViewer = ({ data }) => {
   const [loadingText, setLoadingText] = useState(false);
   const [textError, setTextError] = useState(null);
 
-  useEffect(() => {
-    const fileId = data?.id;
-    const fileTitle = data?.title;
-    if (fileId && fileTitle && getFileType(fileTitle) === 'video') {
-      return () => {
-        fetch(`${config.FILE_API_BASE_URL || ''}/api/files/${fileId}/preview`, {
-          method: 'DELETE',
-          keepalive: true
-        }).catch(err => {
-          console.error("Failed to delete temp video preview file:", err);
-        });
-      };
-    }
-  }, [data]);
+  const resolvedType = data?.type && data.type !== 'unknown' ? data.type : getFileType(data?.title);
+
+  const getStreamUrl = (url) => {
+    if (!url) return '';
+    const token = localStorage.getItem('token');
+    return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -81,20 +98,22 @@ const FileViewer = ({ data }) => {
     setLoadingZip(true);
     setZipError(null);
     try {
-      const response = await fetch(url);
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const response = await fetch(url, { headers });
       if (!response.ok) throw new Error('Failed to fetch zip file');
       const blob = await response.blob();
       const zip = await import("@zip.js/zip.js");
       const reader = new zip.ZipReader(new zip.BlobReader(blob));
       const entries = await reader.getEntries();
-      
+
       const contents = entries.map(entry => ({
         name: entry.filename,
         size: formatBytes(entry.uncompressedSize),
         isDirectory: entry.directory,
         type: getFileType(entry.filename)
       }));
-      
+
       setZipContents(contents);
       await reader.close();
     } catch (err) {
@@ -109,9 +128,11 @@ const FileViewer = ({ data }) => {
     setLoadingOffice(true);
     setOfficeError(null);
     setExcelData(null);
-    
+
     try {
-      const response = await fetch(url);
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const response = await fetch(url, { headers });
       if (!response.ok) throw new Error(`Failed to fetch ${type} file`);
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
@@ -142,7 +163,9 @@ const FileViewer = ({ data }) => {
     setLoadingText(true);
     setTextError(null);
     try {
-      const response = await fetch(url);
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const response = await fetch(url, { headers });
       if (!response.ok) throw new Error('Failed to fetch text file');
       const text = await response.text();
       setTextContent(text);
@@ -180,16 +203,14 @@ const FileViewer = ({ data }) => {
         setTextError(null);
       }
     }, 0);
-    
+
     return () => clearTimeout(timer);
   }, [data, loadZipContents, loadOfficeDoc, loadTextContent]);
 
   const handleDownload = () => {
     if (!data || !data.id) return;
-    
-    // The backend provides a specific endpoint that forces a download attachment
-    // We can trigger this by creating a temporary anchor element
-    const downloadUrl = `${config.FILE_API_BASE_URL || ''}/api/files/${data.id}/download`;
+
+    const downloadUrl = getStreamUrl(`${config.API_BASE_URL || ''}/api/files/${data.id}/download`);
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = data.title; // Provide a fallback filename
@@ -199,35 +220,97 @@ const FileViewer = ({ data }) => {
   };
 
   const handlePrint = () => {
-    if (!data || !data.url) return;
+    if (!data) return;
 
-    // For printing, we open the file content in a hidden iframe and call print()
+    if (resolvedType === 'pdf') {
+      const printUrl = getStreamUrl(data.url);
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+      iframe.src = printUrl;
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          setTimeout(() => document.body.removeChild(iframe), 1000);
+        } catch (e) {
+          console.error("PDF Print failed", e);
+          window.open(printUrl, '_blank');
+          document.body.removeChild(iframe);
+        }
+      };
+      return;
+    }
+
+    // For other document types, print the rendered preview HTML inside the iframe
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
     iframe.style.width = '0';
     iframe.style.height = '0';
     iframe.style.border = 'none';
-    iframe.src = data.url;
-
     document.body.appendChild(iframe);
 
-    iframe.onload = () => {
-      try {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        // Clean up after print dialog closes (approximate)
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-        }, 1000);
-      } catch (e) {
-        console.error("Print failed, possibly blocked by browser security.", e);
-        // Fallback: open in new tab and ask user to print
-        window.open(data.url, '_blank');
-        document.body.removeChild(iframe);
-      }
-    };
+    const previewEl = document.querySelector('.viewer-content');
+    const contentHtml = previewEl ? previewEl.innerHTML : '';
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <html>
+        <head>
+          <title>${data.title}</title>
+          <style>
+            body {
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              padding: 20px;
+              color: #333;
+              background: white;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 20px;
+              font-size: 12px;
+            }
+            td, th {
+              border: 1px solid #ddd;
+              padding: 8px;
+            }
+            tr:nth-child(even) {
+              background-color: #f9f9f9;
+            }
+            pre {
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              font-family: monospace;
+              font-size: 13px;
+              background: #f8f9fa;
+              padding: 15px;
+              border-radius: 6px;
+              border: 1px solid #e9ecef;
+            }
+          </style>
+        </head>
+        <body>
+          <h2>${data.title}</h2>
+          <hr />
+          <div>${contentHtml}</div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    } catch (e) {
+      console.error("Print failed", e);
+      document.body.removeChild(iframe);
+    }
   };
 
   if (!data) {
@@ -240,7 +323,8 @@ const FileViewer = ({ data }) => {
           <h3>No File Selected</h3>
           <p>Select a document from the list to preview its contents here.</p>
         </div>
-        <style dangerouslySetInnerHTML={{ __html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           .document-viewer.empty {
             height: 100%;
             display: flex;
@@ -274,14 +358,7 @@ const FileViewer = ({ data }) => {
     );
   }
 
-  const resolvedType = data?.type && data.type !== 'unknown' ? data.type : getFileType(data?.title);
-
   const renderPreviewContent = () => {
-    // PDF is now handled by PdfViewer
-    if (resolvedType === 'pdf' && data.url) {
-      return <PdfViewer key={data.id} url={data.url} />;
-    }
-
     if (loadingOffice || loadingText) {
       return <div className="loading-state">Loading document...</div>;
     }
@@ -290,19 +367,35 @@ const FileViewer = ({ data }) => {
       return <div className="error-state">{officeError || textError}</div>;
     }
 
+    // PDF is now handled by PdfViewer
+    if (resolvedType === 'pdf' && data.url) {
+      return <PdfViewer key={data.id} url={getStreamUrl(data.url)} />;
+    }
+
     switch (resolvedType) {
       case 'image':
         return (
           <div className="image-preview-wrapper" style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <img src={data.url} alt={data.title} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            <img src={getStreamUrl(data.url)} alt={data.title} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
           </div>
         );
       case 'video':
         return (
           <div className="video-preview-wrapper" style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', background: 'var(--solid-bg)' }}>
-            <video controls src={data.url} style={{ maxWidth: '100%', maxHeight: '100%' }}>
+            <video controls src={getStreamUrl(data.url)} style={{ width: '100%', height: '100%', objectFit: 'contain' }}>
               Your browser does not support the video tag.
             </video>
+          </div>
+        );
+      case 'html':
+        return (
+          <div className="html-preview-wrapper" style={{ height: '100%', width: '100%' }}>
+            <iframe
+              src={getStreamUrl(data.url)}
+              title={data.title}
+              style={{ width: '100%', height: '100%', border: 'none', background: 'white' }}
+              sandbox="allow-scripts allow-same-origin"
+            />
           </div>
         );
       case 'text':
@@ -393,7 +486,9 @@ const FileViewer = ({ data }) => {
         </div>
         <div className="header-actions">
           <button className="action-btn" onClick={handleDownload} title="Download"><Download size={18} /></button>
-          <button className="action-btn" onClick={handlePrint} title="Print"><Printer size={18} /></button>
+          {resolvedType !== 'video' && resolvedType !== 'image' && resolvedType !== 'zip' && (
+            <button className="action-btn" onClick={handlePrint} title="Print"><Printer size={18} /></button>
+          )}
           <button className="action-btn" onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
             {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </button>
@@ -402,7 +497,8 @@ const FileViewer = ({ data }) => {
       <div className="viewer-content">
         {renderPreviewContent()}
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .document-viewer {
           height: 100%;
           display: flex;

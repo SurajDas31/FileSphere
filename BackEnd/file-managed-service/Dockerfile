@@ -34,6 +34,6 @@ COPY --from=builder /app/filesphere-api .
 # Create the storage directory so the relative path "../storage/" resolves properly
 RUN mkdir -p /app/storage
 
-EXPOSE 8080
+EXPOSE 7001
 
 CMD ["./filesphere-api"]

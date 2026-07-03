@@ -17,15 +17,15 @@ const getFileType = (filename, type) => {
   return 'unknown';
 };
 
-const FileList = ({ 
-  data, 
-  selectedId, 
-  selectedDocIds = [], 
-  setSelectedDocIds, 
-  onDocClick, 
-  isPreviewVisible, 
-  setIsPreviewVisible, 
-  isLoading, 
+const FileList = ({
+  data,
+  selectedId,
+  selectedDocIds = [],
+  setSelectedDocIds,
+  onDocClick,
+  isPreviewVisible,
+  setIsPreviewVisible,
+  isLoading,
   onFileUpdated,
   onDeleteFiles,
   onCopyFiles,
@@ -56,7 +56,7 @@ const FileList = ({
       return;
     }
     try {
-      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/files/${fileId}`, {
+      const res = await fetch(`${config.API_BASE_URL || ''}/api/files/${fileId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editingTitle.trim() })
@@ -187,11 +187,11 @@ const FileList = ({
       sortableItems.sort((a, b) => {
         let aVal = a[sortConfig.key];
         let bVal = b[sortConfig.key];
-        
+
         // Handle date sorting properly
         if (sortConfig.key === 'dateModified') {
-           // Basic string compare for local date string, for robustness you'd parse real dates
-           // but since our dateModified is "DD/MM/YYYY" string, we'll just fall back to string compare
+          // Basic string compare for local date string, for robustness you'd parse real dates
+          // but since our dateModified is "DD/MM/YYYY" string, we'll just fall back to string compare
         }
 
         if (aVal < bVal) {
@@ -210,13 +210,13 @@ const FileList = ({
     if (sortConfig.key !== columnName) {
       return <ChevronDown size={14} style={{ display: 'inline', verticalAlign: 'middle', opacity: 0.3 }} />;
     }
-    return sortConfig.direction === 'asc' 
-      ? <ChevronUp size={14} style={{ display: 'inline', verticalAlign: 'middle', color: 'var(--accent)' }} /> 
+    return sortConfig.direction === 'asc'
+      ? <ChevronUp size={14} style={{ display: 'inline', verticalAlign: 'middle', color: 'var(--accent)' }} />
       : <ChevronDown size={14} style={{ display: 'inline', verticalAlign: 'middle', color: 'var(--accent)' }} />;
   };
 
   return (
-    <div 
+    <div
       className="document-list glass-panel"
       onDragOver={handleContainerDragOver}
       onDragLeave={handleContainerDragLeave}
@@ -251,7 +251,7 @@ const FileList = ({
           </div>
         </div>
         <div className="toolbar-group">
-          <div 
+          <div
             className={`toolbar-toggle ${isPreviewVisible ? 'active' : ''}`}
             onClick={() => setIsPreviewVisible(!isPreviewVisible)}
             title={isPreviewVisible ? "Hide Preview" : "Show Preview"}
@@ -271,8 +271,8 @@ const FileList = ({
             <thead>
               <tr>
                 <th style={{ width: '40px' }}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={data.length > 0 && selectedDocIds.length === data.length}
                     onChange={handleSelectAll}
                   />
@@ -296,8 +296,8 @@ const FileList = ({
                 const resolvedType = getFileType(doc.title, doc.type);
                 const isSelected = selectedDocIds.includes(doc.id);
                 return (
-                  <tr 
-                    key={doc.id} 
+                  <tr
+                    key={doc.id}
                     className={isSelected ? 'selected' : ''}
                     onClick={() => onDocClick(doc.id)}
                     onContextMenu={(e) => handleContextMenu(e, doc)}
@@ -307,7 +307,7 @@ const FileList = ({
                       if (selectedDocIds.includes(doc.id)) {
                         draggedDocs = data.filter(d => selectedDocIds.includes(d.id));
                       }
-                      
+
                       e.dataTransfer.setData("application/json", JSON.stringify({
                         type: 'file',
                         files: draggedDocs.map(d => ({ id: d.id, title: d.title }))
@@ -326,10 +326,10 @@ const FileList = ({
                       dragImage.style.fontSize = '13px';
                       dragImage.style.fontWeight = '500';
                       dragImage.style.zIndex = '999999';
-                      
+
                       const isDarkMode = document.body.classList.contains('dark-mode');
                       const isGlassmorphic = document.body.classList.contains('glassmorphic-ui');
-                      
+
                       if (isGlassmorphic) {
                         if (isDarkMode) {
                           dragImage.style.background = 'rgba(15, 18, 25, 0.7)';
@@ -364,7 +364,7 @@ const FileList = ({
 
                       document.body.appendChild(dragImage);
                       e.dataTransfer.setDragImage(dragImage, 10, 10);
-                      
+
                       setTimeout(() => {
                         if (document.body.contains(dragImage)) {
                           document.body.removeChild(dragImage);
@@ -373,20 +373,20 @@ const FileList = ({
                     }}
                   >
                     <td>
-                      <input 
-                        type="checkbox" 
-                        checked={isSelected} 
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
                         onChange={(e) => handleSelectOne(e, doc.id)}
                         onClick={(e) => e.stopPropagation()}
                       />
                     </td>
                     <td className="title-cell">
                       <div className="title-cell-content">
-                       <div className={`doc-icon ${resolvedType}`}>
-                        {resolvedType === 'pdf' ? 'PDF' : resolvedType === 'word' ? 'DOC' : resolvedType === 'image' ? 'IMG' : resolvedType === 'video' ? 'VID' : resolvedType === 'excel' ? 'XLS' : resolvedType === 'zip' ? 'ZIP' : resolvedType === 'text' ? 'TXT' : 'FILE'}
+                        <div className={`doc-icon ${resolvedType}`}>
+                          {resolvedType === 'pdf' ? 'PDF' : resolvedType === 'word' ? 'DOC' : resolvedType === 'image' ? 'IMG' : resolvedType === 'video' ? 'VID' : resolvedType === 'excel' ? 'XLS' : resolvedType === 'zip' ? 'ZIP' : resolvedType === 'text' ? 'TXT' : 'FILE'}
                         </div>
                         {editingFileId === doc.id ? (
-                          <input 
+                          <input
                             type="text"
                             value={editingTitle}
                             onChange={(e) => setEditingTitle(e.target.value)}
@@ -400,7 +400,7 @@ const FileList = ({
                             autoFocus
                           />
                         ) : (
-                          <span 
+                          <span
                             className="doc-title"
                             onDoubleClick={(e) => {
                               e.stopPropagation();
@@ -434,15 +434,16 @@ const FileList = ({
       </div>
 
       {contextMenu && (
-        <ContextMenu 
-          x={contextMenu.x} 
-          y={contextMenu.y} 
-          options={contextMenu.options} 
-          onClose={() => setContextMenu(null)} 
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          options={contextMenu.options}
+          onClose={() => setContextMenu(null)}
         />
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .document-list {
           height: 100%;
           display: flex;

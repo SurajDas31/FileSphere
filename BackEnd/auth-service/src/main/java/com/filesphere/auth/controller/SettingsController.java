@@ -17,12 +17,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.*;
 import com.filesphere.auth.model.User;
+import com.filesphere.auth.model.Tenant;
 import com.filesphere.auth.repository.UserRepository;
-
+import com.filesphere.auth.repository.TenantRepository;
+import java.util.UUID;
 import java.util.Arrays;
 
 @RestController
@@ -39,6 +39,9 @@ public class SettingsController {
 
     @Autowired
     private com.filesphere.auth.repository.UserSettingRepository userSettingRepository;
+
+    @Autowired
+    private TenantRepository tenantRepository;
 
     @GetMapping("/user/settings")
     public ResponseEntity<?> getUserSettings() {
@@ -282,5 +285,56 @@ public class SettingsController {
         } catch (Exception e) {
             log.warn("Error exploring subdirectories at " + currentDir + ": " + e.getMessage());
         }
+    }
+
+    @GetMapping("/admin/tenants/details")
+    public ResponseEntity<?> getTenantsDetails() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Logged in user not found"));
+
+        if (!"SUPER_ADMIN".equalsIgnoreCase(currentUser.getRole())) {
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied: SUPER_ADMIN role required"));
+        }
+
+        return ResponseEntity.ok(tenantRepository.findAll());
+    }
+
+    @PutMapping("/admin/tenants/upload-limit")
+    public ResponseEntity<?> updateTenantUploadLimit(@RequestBody Map<String, Object> payload) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Logged in user not found"));
+
+        if (!"SUPER_ADMIN".equalsIgnoreCase(currentUser.getRole())) {
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied: SUPER_ADMIN role required"));
+        }
+
+        String tenantIdStr = (String) payload.get("id");
+        Long limitBytes = Long.valueOf(String.valueOf(payload.get("maxFileSizeBytes")));
+
+        Tenant tenant = tenantRepository.findById(UUID.fromString(tenantIdStr))
+                .orElseThrow(() -> new RuntimeException("Tenant not found"));
+
+        tenant.setMaxFileSizeBytes(limitBytes);
+        tenantRepository.save(tenant);
+
+        return ResponseEntity.ok(Map.of("message", "Tenant upload limit updated successfully", "tenant", tenant));
+    }
+
+    @GetMapping("/tenant/details")
+    public ResponseEntity<?> getMyTenantDetails() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Logged in user not found"));
+
+        Tenant tenant = currentUser.getTenant();
+        if (tenant == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Tenant not found for current user"));
+        }
+        return ResponseEntity.ok(tenant);
     }
 }

@@ -172,6 +172,7 @@ public class AuthController {
         SecurityContextHolder.clearContext();
         return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
+    @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(@RequestBody Map<String, String> request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String email = authentication.getName();
@@ -261,7 +262,7 @@ public class AuthController {
 
             // Save visual relative URL access path or disk absolute path
             // Tying this to local port mapping so standard HTTP can fetch it
-            String accessPath = "http://localhost:8081/api/auth/profile/pic/" + internalName;
+            String accessPath = "http://localhost:7002/api/auth/profile/pic/" + internalName;
             user.setProfilePicPath(accessPath);
             userRepository.save(user);
 

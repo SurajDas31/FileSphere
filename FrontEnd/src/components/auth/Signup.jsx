@@ -33,7 +33,7 @@ const Signup = ({ onSignup, onBackToLogin }) => {
 
     setLoading(true);
     try {
-      const signupUrl = `${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/signup`;
+      const signupUrl = `${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/signup`;
       const res = await fetch(signupUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -162,24 +162,24 @@ const Signup = ({ onSignup, onBackToLogin }) => {
             </label>
             <div style={{ display: 'flex', gap: '20px', margin: '5px 0' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-main)' }}>
-                <input 
-                  type="radio" 
-                  name="joinTenantMode" 
-                  value="join" 
+                <input
+                  type="radio"
+                  name="joinTenantMode"
+                  value="join"
                   style={{ accentColor: 'var(--accent)' }}
-                  checked={formData.joinTenantMode === 'join'} 
-                  onChange={handleChange} 
+                  checked={formData.joinTenantMode === 'join'}
+                  onChange={handleChange}
                 />
                 Join Existing Tenant
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: 'var(--text-main)' }}>
-                <input 
-                  type="radio" 
-                  name="joinTenantMode" 
-                  value="create" 
+                <input
+                  type="radio"
+                  name="joinTenantMode"
+                  value="create"
                   style={{ accentColor: 'var(--accent)' }}
-                  checked={formData.joinTenantMode === 'create'} 
-                  onChange={handleChange} 
+                  checked={formData.joinTenantMode === 'create'}
+                  onChange={handleChange}
                 />
                 Create New Tenant
               </label>
@@ -193,14 +193,14 @@ const Signup = ({ onSignup, onBackToLogin }) => {
                   placeholder="Enter Tenant ID (UUID Format) *"
                   value={formData.tenantId}
                   onChange={handleChange}
-                  style={{ 
-                    padding: '10px 14px', 
-                    background: 'rgba(255,255,255,0.05)', 
-                    border: '1.5px solid #e74c3c', 
-                    borderRadius: '12px', 
-                    color: 'var(--text-main)', 
-                    fontSize: '13px', 
-                    width: '100%', 
+                  style={{
+                    padding: '10px 14px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1.5px solid #e74c3c',
+                    borderRadius: '12px',
+                    color: 'var(--text-main)',
+                    fontSize: '13px',
+                    width: '100%',
                     marginTop: '5px',
                     outline: 'none',
                     boxShadow: '0 0 10px rgba(231, 76, 60, 0.1)'
@@ -216,14 +216,14 @@ const Signup = ({ onSignup, onBackToLogin }) => {
                 value={formData.tenantName}
                 onChange={handleChange}
                 required
-                style={{ 
-                  padding: '10px 14px', 
-                  background: 'rgba(255,255,255,0.05)', 
-                  border: '1px solid var(--glass-border)', 
-                  borderRadius: '12px', 
-                  color: 'var(--text-main)', 
-                  fontSize: '13px', 
-                  width: '100%', 
+                style={{
+                  padding: '10px 14px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '12px',
+                  color: 'var(--text-main)',
+                  fontSize: '13px',
+                  width: '100%',
                   marginTop: '5px',
                   outline: 'none'
                 }}
@@ -246,7 +246,8 @@ const Signup = ({ onSignup, onBackToLogin }) => {
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .login-container {
           height: 100vh;
           width: 100vw;

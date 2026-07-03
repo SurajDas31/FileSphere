@@ -4,14 +4,14 @@ import { config } from '../../config';
 
 const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialCategory = 'general' }) => {
   const [activeCategory, setActiveCategory] = useState(initialCategory);
-  
+
   useEffect(() => {
     if (isOpen) {
       setActiveCategory(initialCategory);
     }
   }, [isOpen, initialCategory]);
 
-  const [isGlassmorphism, setIsGlassmorphism] = useState(() => 
+  const [isGlassmorphism, setIsGlassmorphism] = useState(() =>
     localStorage.getItem('ui_glassmorphism') !== 'false'
   );
 
@@ -29,6 +29,8 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
     facebook_client_secret: ''
   });
   const [tenants, setTenants] = useState({});
+  const [tenantsDetails, setTenantsDetails] = useState([]);
+  const [myTenant, setMyTenant] = useState(null);
   const [loadingAdmin, setLoadingAdmin] = useState(false);
   const [ftpTesting, setFtpTesting] = useState(false);
   const [ftpTestMessage, setFtpTestMessage] = useState('');
@@ -84,14 +86,14 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/user/settings`, {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/user/settings`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
         setUserSettings(data);
         setUserSettingsInitial(data);
-        
+
         // Persist theme class dynamically
         if (data.theme === 'dark') {
           document.body.classList.add('dark-mode');
@@ -113,7 +115,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/user/settings`, {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/user/settings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +128,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
         setUserSettings(data);
         setUserSettingsInitial(data);
         setUserSettingsSaveMsg('Preferences saved successfully!');
-        
+
         // Apply visual properties instantly
         if (data.theme === 'dark') {
           document.body.classList.add('dark-mode');
@@ -143,7 +145,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
           document.body.classList.remove('glassmorphic-ui');
         }
         document.documentElement.style.setProperty('--accent', data.accentColor === 'blue' ? '#3498db' : data.accentColor === 'purple' ? '#9b59b6' : data.accentColor === 'green' ? '#2ecc71' : '#e74c3c');
-        
+
         setTimeout(() => setUserSettingsSaveMsg(''), 3000);
       } else {
         setUserSettingsSaveMsg('Failed to save preferences');
@@ -170,17 +172,63 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen && activeCategory === 'admin' && isSuperAdmin) {
-      loadAdminData();
+    if (isOpen) {
+      if (isSuperAdmin) {
+        if (activeCategory === 'admin' || activeCategory === 'storage') {
+          loadAdminData();
+        }
+      } else {
+        if (activeCategory === 'storage') {
+          loadMyTenantDetails();
+        }
+      }
     }
   }, [isOpen, activeCategory]);
+
+  const loadMyTenantDetails = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/tenant/details`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMyTenant(data);
+      }
+    } catch (e) {
+      console.error("Failed to load tenant details", e);
+    }
+  };
+
+  const handleSaveTenantLimit = async (tenantId, newLimitMb) => {
+    const token = localStorage.getItem('token');
+    const bytes = parseFloat(newLimitMb) * 1024 * 1024;
+    try {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/admin/tenants/upload-limit`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: tenantId, maxFileSizeBytes: bytes })
+      });
+      if (res.ok) {
+        setTenantsDetails(prev => prev.map(t => t.id === tenantId ? { ...t, maxFileSizeBytes: bytes } : t));
+        setSaveMessage('Tenant upload limit updated successfully!');
+        setTimeout(() => setSaveMessage(''), 3000);
+      }
+    } catch (e) {
+      console.error("Failed to save tenant limit", e);
+    }
+  };
 
   const loadAdminData = async () => {
     setLoadingAdmin(true);
     const token = localStorage.getItem('token');
     try {
       // Fetch system settings
-      const settingsRes = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/admin/settings`, {
+      const settingsRes = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/admin/settings`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (settingsRes.ok) {
@@ -190,12 +238,21 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
       }
 
       // Fetch tenants and users
-      const tenantsRes = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/admin/tenants`, {
+      const tenantsRes = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/admin/tenants`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (tenantsRes.ok) {
         const tenantsData = await tenantsRes.json();
         setTenants(tenantsData);
+      }
+
+      // Fetch tenants details (with upload limits)
+      const detailsRes = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/admin/tenants/details`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (detailsRes.ok) {
+        const detailsData = await detailsRes.json();
+        setTenantsDetails(detailsData);
       }
 
       // Fetch storage directories suggestions
@@ -211,7 +268,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
     setSaveMessage('');
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/admin/settings`, {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/admin/settings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -242,7 +299,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
   const reloadStoragePaths = async () => {
     const token = localStorage.getItem('token');
     try {
-      const pathsRes = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/admin/storage/directories`, {
+      const pathsRes = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/admin/storage/directories`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (pathsRes.ok) {
@@ -261,7 +318,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
     setFtpTestMessage('');
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/admin/ftp/test`, {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/admin/ftp/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -295,7 +352,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
     setProfileSaveMsg('');
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/profile`, {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -386,7 +443,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
         formData.append('file', blob, 'profile.png');
 
         try {
-          const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/profile/upload`, {
+          const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/profile/upload`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`
@@ -461,49 +518,49 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontWeight: '500', fontSize: '14px' }}>Reveal Secrets</label>
-              <button 
-                className="btn-secondary" 
+              <button
+                className="btn-secondary"
                 style={{ padding: '4px 12px', fontSize: '12px' }}
                 onClick={() => setShowOauthSecrets(!showOauthSecrets)}
               >
                 {showOauthSecrets ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
-            
+
             <div className="admin-field-row">
               <label>Google Client ID</label>
-              <input 
-                type="text" 
-                className="settings-input" 
+              <input
+                type="text"
+                className="settings-input"
                 value={adminSettings.google_client_id || ''}
-                onChange={e => setAdminSettings({...adminSettings, google_client_id: e.target.value})}
+                onChange={e => setAdminSettings({ ...adminSettings, google_client_id: e.target.value })}
               />
             </div>
             <div className="admin-field-row">
               <label>Google Secret Key</label>
-              <input 
-                type={showOauthSecrets ? "text" : "password"} 
-                className="settings-input" 
+              <input
+                type={showOauthSecrets ? "text" : "password"}
+                className="settings-input"
                 value={adminSettings.google_client_secret || ''}
-                onChange={e => setAdminSettings({...adminSettings, google_client_secret: e.target.value})}
+                onChange={e => setAdminSettings({ ...adminSettings, google_client_secret: e.target.value })}
               />
             </div>
             <div className="admin-field-row">
               <label>Facebook Client ID</label>
-              <input 
-                type="text" 
-                className="settings-input" 
+              <input
+                type="text"
+                className="settings-input"
                 value={adminSettings.facebook_client_id || ''}
-                onChange={e => setAdminSettings({...adminSettings, facebook_client_id: e.target.value})}
+                onChange={e => setAdminSettings({ ...adminSettings, facebook_client_id: e.target.value })}
               />
             </div>
             <div className="admin-field-row">
               <label>Facebook Secret Key</label>
-              <input 
-                type={showOauthSecrets ? "text" : "password"} 
-                className="settings-input" 
+              <input
+                type={showOauthSecrets ? "text" : "password"}
+                className="settings-input"
                 value={adminSettings.facebook_client_secret || ''}
-                onChange={e => setAdminSettings({...adminSettings, facebook_client_secret: e.target.value})}
+                onChange={e => setAdminSettings({ ...adminSettings, facebook_client_secret: e.target.value })}
               />
             </div>
           </div>
@@ -515,11 +572,11 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <div className="admin-field-row">
               <label>Storage Mode</label>
-              <select 
+              <select
                 className="settings-select"
                 value={adminSettings.storage_type || 'LOCAL'}
                 onChange={e => {
-                  setAdminSettings({...adminSettings, storage_type: e.target.value});
+                  setAdminSettings({ ...adminSettings, storage_type: e.target.value });
                   setFtpTestSuccess(false);
                 }}
               >
@@ -531,12 +588,12 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
             {adminSettings.storage_type === 'LOCAL' ? (
               <div className="admin-field-row">
                 <label>Storage Base Path</label>
-                <input 
-                  type="text" 
-                  className="settings-input" 
+                <input
+                  type="text"
+                  className="settings-input"
                   style={{ width: '60%' }}
                   value={adminSettings.storage_path || ''}
-                  onChange={e => setAdminSettings({...adminSettings, storage_path: e.target.value})}
+                  onChange={e => setAdminSettings({ ...adminSettings, storage_path: e.target.value })}
                 />
               </div>
             ) : (
@@ -544,19 +601,19 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                 <div className="admin-field-row">
                   <label>Storage Base Path</label>
                   <div style={{ display: 'flex', gap: '10px', width: '60%' }}>
-                    <select 
+                    <select
                       className="settings-select"
                       style={{ width: '100%' }}
                       value={adminSettings.storage_path || '/'}
-                      onChange={e => setAdminSettings({...adminSettings, storage_path: e.target.value})}
+                      onChange={e => setAdminSettings({ ...adminSettings, storage_path: e.target.value })}
                     >
                       {storagePaths.map(path => (
                         <option key={path} value={path}>{path}</option>
                       ))}
                     </select>
-                    <button 
-                      className="btn-secondary" 
-                      style={{ padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                    <button
+                      className="btn-secondary"
+                      style={{ padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       title="Reload directories"
                       onClick={(e) => {
                         e.preventDefault();
@@ -575,43 +632,43 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                 <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '600' }}>FTP Server Credentials</h4>
                 <div className="admin-field-row">
                   <label>Host Address</label>
-                  <input 
-                    type="text" 
-                    className="settings-input" 
+                  <input
+                    type="text"
+                    className="settings-input"
                     value={adminSettings.ftp_host || ''}
-                    onChange={e => setAdminSettings({...adminSettings, ftp_host: e.target.value})}
+                    onChange={e => setAdminSettings({ ...adminSettings, ftp_host: e.target.value })}
                   />
                 </div>
                 <div className="admin-field-row">
                   <label>Port</label>
-                  <input 
-                    type="text" 
-                    className="settings-input" 
+                  <input
+                    type="text"
+                    className="settings-input"
                     value={adminSettings.ftp_port || '21'}
-                    onChange={e => setAdminSettings({...adminSettings, ftp_port: e.target.value})}
+                    onChange={e => setAdminSettings({ ...adminSettings, ftp_port: e.target.value })}
                   />
                 </div>
                 <div className="admin-field-row">
                   <label>Username</label>
-                  <input 
-                    type="text" 
-                    className="settings-input" 
+                  <input
+                    type="text"
+                    className="settings-input"
                     value={adminSettings.ftp_user || ''}
-                    onChange={e => setAdminSettings({...adminSettings, ftp_user: e.target.value})}
+                    onChange={e => setAdminSettings({ ...adminSettings, ftp_user: e.target.value })}
                   />
                 </div>
                 <div className="admin-field-row">
                   <label>Password</label>
                   <div style={{ display: 'flex', gap: '10px', width: '60%' }}>
-                    <input 
-                      type={showFtpPassword ? "text" : "password"} 
-                      className="settings-input" 
+                    <input
+                      type={showFtpPassword ? "text" : "password"}
+                      className="settings-input"
                       style={{ width: '100%' }}
                       value={adminSettings.ftp_password || ''}
-                      onChange={e => setAdminSettings({...adminSettings, ftp_password: e.target.value})}
+                      onChange={e => setAdminSettings({ ...adminSettings, ftp_password: e.target.value })}
                     />
-                    <button 
-                      className="btn-secondary" 
+                    <button
+                      className="btn-secondary"
                       onClick={() => setShowFtpPassword(!showFtpPassword)}
                     >
                       {showFtpPassword ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -620,8 +677,8 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginTop: '10px' }}>
-                  <button 
-                    className="btn-primary" 
+                  <button
+                    className="btn-primary"
                     style={{ padding: '8px 16px', background: 'var(--accent)', fontSize: '13px' }}
                     onClick={handleTestFtp}
                     disabled={ftpTesting}
@@ -650,9 +707,9 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
             {Object.keys(tenants).map(tenantId => (
               <div key={tenantId} style={{ border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '15px', background: 'rgba(0,0,0,0.02)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                   <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--accent)' }}>
+                  <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--accent)' }}>
                     🏢 Tenant Key: {tenantId}
-                   </span>
+                  </span>
                   <span style={{ fontSize: '11px', background: 'rgba(52,152,219,0.1)', padding: '2px 8px', borderRadius: '12px', color: 'var(--accent)' }}>
                     {tenants[tenantId].length} isolated accounts
                   </span>
@@ -701,7 +758,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                   <label>Interface Theme</label>
                   <p>Choose how FileSphere looks to you.</p>
                 </div>
-                <select 
+                <select
                   className="settings-select"
                   value={userSettings.theme}
                   onChange={(e) => {
@@ -719,9 +776,9 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                   <p>Enable frosted glass panels and background blur.</p>
                 </div>
                 <label className="switch">
-                  <input 
-                    type="checkbox" 
-                    checked={isGlassmorphism} 
+                  <input
+                    type="checkbox"
+                    checked={isGlassmorphism}
                     onChange={(e) => {
                       const enabled = e.target.checked;
                       setIsGlassmorphism(enabled);
@@ -738,7 +795,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                 </div>
                 <div className="color-presets">
                   {['blue', 'purple', 'green', 'red'].map(color => (
-                    <div 
+                    <div
                       key={color}
                       className={`color-dot ${color} ${userSettings.accentColor === color ? 'active' : ''}`}
                       onClick={() => {
@@ -758,9 +815,9 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                   <p>Automatically collapse the sidebar when not in use.</p>
                 </div>
                 <label className="switch">
-                  <input 
-                    type="checkbox" 
-                    checked={userSettings.autoHideSidebar} 
+                  <input
+                    type="checkbox"
+                    checked={userSettings.autoHideSidebar}
                     onChange={(e) => setUserSettings({ ...userSettings, autoHideSidebar: e.target.checked })}
                   />
                   <span className="slider round"></span>
@@ -791,10 +848,10 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
               <div style={{ display: 'flex', alignItems: 'center', gap: '25px', marginBottom: '25px' }}>
                 <div style={{ position: 'relative' }}>
                   {userProfile?.profilePicPath ? (
-                    <img 
-                      src={userProfile.profilePicPath} 
-                      alt="Profile" 
-                      style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent)' }} 
+                    <img
+                      src={userProfile.profilePicPath}
+                      alt="Profile"
+                      style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent)' }}
                     />
                   ) : (
                     <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(52,152,219,0.1)', display: 'flex', alignItems: 'center', justifyContext: 'center', fontSize: '32px', color: 'var(--accent)' }}>
@@ -803,10 +860,10 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                   )}
                   <label htmlFor="profile-pic-input" style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--accent)', color: 'white', borderRadius: '50%', p: '6px', cursor: 'pointer', display: 'flex', border: '2px solid white', margin: 0 }}>
                     <Upload size={14} />
-                    <input 
-                      id="profile-pic-input" 
-                      type="file" 
-                      accept="image/*" 
+                    <input
+                      id="profile-pic-input"
+                      type="file"
+                      accept="image/*"
                       style={{ display: 'none' }}
                       onChange={handleProfilePicUpload}
                       disabled={uploadingPic}
@@ -827,20 +884,20 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
 
               <div className="admin-field-row" style={{ display: 'flex', marginBottom: '15px' }}>
                 <label style={{ width: '30%', fontWeight: '500' }}>First Name</label>
-                <input 
-                  type="text" 
-                  className="settings-input" 
-                  style={{ width: '70%' }} 
+                <input
+                  type="text"
+                  className="settings-input"
+                  style={{ width: '70%' }}
                   value={profileFirstName}
                   onChange={e => setProfileFirstName(e.target.value)}
                 />
               </div>
               <div className="admin-field-row" style={{ display: 'flex', marginBottom: '15px' }}>
                 <label style={{ width: '30%', fontWeight: '500' }}>Last Name</label>
-                <input 
-                  type="text" 
-                  className="settings-input" 
-                  style={{ width: '70%' }} 
+                <input
+                  type="text"
+                  className="settings-input"
+                  style={{ width: '70%' }}
                   value={profileLastName}
                   onChange={e => setProfileLastName(e.target.value)}
                 />
@@ -851,10 +908,10 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
               </div>
               <div className="admin-field-row" style={{ display: 'flex', marginBottom: '20px' }}>
                 <label style={{ width: '30%', fontWeight: '500' }}>Mobile Number</label>
-                <input 
-                  type="text" 
-                  className="settings-input" 
-                  style={{ width: '70%' }} 
+                <input
+                  type="text"
+                  className="settings-input"
+                  style={{ width: '70%' }}
                   value={profileMobileNo}
                   onChange={e => setProfileMobileNo(e.target.value)}
                 />
@@ -870,6 +927,71 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                   </span>
                 )}
               </div>
+            </section>
+          </div>
+        );
+      case 'storage':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <section className="settings-section">
+              <h3>Tenant Upload Limitation Settings</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                Set the maximum allowable file upload size per tenant. Changes will be persisted in the database and enforced globally.
+              </p>
+              {isSuperAdmin ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {tenantsDetails.map(tenant => (
+                    <div key={tenant.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px', border: '1px solid var(--glass-border)', borderRadius: '12px', background: 'rgba(255,255,255,0.02)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--accent)' }}>🏢 {tenant.name}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tenant Key: {tenant.tenantKey}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                          <input
+                            type="number"
+                            className="settings-input"
+                            style={{ width: '100px', textAlign: 'right', paddingRight: '35px' }}
+                            defaultValue={Math.round(tenant.maxFileSizeBytes / 1024 / 1024)}
+                            id={`limit-${tenant.id}`}
+                          />
+                          <span style={{ position: 'absolute', right: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>MB</span>
+                        </div>
+                        <button
+                          className="btn-primary"
+                          style={{ padding: '8px 12px', fontSize: '12px' }}
+                          onClick={() => {
+                            const inputEl = document.getElementById(`limit-${tenant.id}`);
+                            if (inputEl) {
+                              handleSaveTenantLimit(tenant.id, inputEl.value);
+                            }
+                          }}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {saveMessage && (
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#2ecc71', marginTop: '10px' }}>
+                      {saveMessage}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '15px', border: '1px solid var(--glass-border)', borderRadius: '12px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: '500' }}>🏢 Tenant Group</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{myTenant?.name || 'Loading...'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                    <span style={{ fontWeight: '500' }}>📁 File Size Limit</span>
+                    <span style={{ fontWeight: '600', color: 'var(--accent)' }}>
+                      {myTenant ? `${Math.round(myTenant.maxFileSizeBytes / 1024 / 1024)} MB` : 'Loading...'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         );
@@ -894,8 +1016,8 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
           </div>
           <div className="settings-nav-list">
             {categories.map(cat => (
-              <div 
-                key={cat.id} 
+              <div
+                key={cat.id}
                 className={`settings-nav-item ${cat.id === activeCategory ? 'active' : ''}`}
                 onClick={() => setActiveCategory(cat.id)}
               >
@@ -927,10 +1049,10 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                 <X size={18} />
               </button>
             </div>
-            
+
             <p className="crop-modal-hint">Drag image to adjust position, use zoom slider below.</p>
-            
-            <div 
+
+            <div
               className="crop-viewport"
               onMouseDown={(e) => {
                 setIsDragCropper(true);
@@ -947,9 +1069,9 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
               onMouseLeave={() => setIsDragCropper(false)}
             >
               <div className="crop-circle-overlay"></div>
-              <img 
-                src={cropSrc} 
-                alt="Crop preview" 
+              <img
+                src={cropSrc}
+                alt="Crop preview"
                 className="crop-preview-image"
                 style={{
                   transform: `translate(${cropOffset.x}px, ${cropOffset.y}px) scale(${cropZoom})`,
@@ -958,20 +1080,20 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                 draggable={false}
               />
             </div>
-            
+
             <div className="crop-zoom-container">
               <label>Zoom</label>
-              <input 
-                type="range" 
-                min="1" 
-                max="3" 
-                step="0.05" 
-                value={cropZoom} 
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.05"
+                value={cropZoom}
                 onChange={(e) => setCropZoom(parseFloat(e.target.value))}
                 className="crop-zoom-slider"
               />
             </div>
-            
+
             <div className="crop-modal-footer">
               <button className="btn-secondary" onClick={() => setCropSrc(null)}>Cancel</button>
               <button className="btn-primary" onClick={commitCroppedImage}>Save Profile Image</button>
@@ -979,7 +1101,8 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
           </div>
         </div>
       )}
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .settings-overlay {
           position: fixed;
           top: 0;

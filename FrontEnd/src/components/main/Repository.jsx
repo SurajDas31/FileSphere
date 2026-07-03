@@ -21,7 +21,8 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }) => {
           <button className="btn-danger" onClick={onConfirm}>Delete</button>
         </div>
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .modal-overlay {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
@@ -89,14 +90,14 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
   const [repositories, setRepositories] = useState([]);
   const fileInputRef = useRef(null);
   const [uploadTargetId, setUploadTargetId] = useState(null);
-  
+
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, name: '' });
-  
+
   // State to track which parent folder is currently displaying the "New Folder" inline input
   const [creatingNodeParentId, setCreatingNodeParentId] = useState(null);
 
   const fetchFolders = useCallback(() => {
-    fetch(`${config.FILE_API_BASE_URL || ''}/api/folders`)
+    fetch(`${config.API_BASE_URL || ''}/api/folders`)
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data)) {
@@ -128,16 +129,16 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
 
   const submitCreateFolder = async (parentId, name) => {
     setCreatingNodeParentId(null); // Remove inline input regardless of outcome
-    
+
     if (!name || name.trim() === '') return;
 
     try {
-      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders`, {
+      const res = await fetch(`${config.API_BASE_URL || ''}/api/folders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), parentId: parentId })
       });
-      
+
       if (res.ok) {
         fetchFolders();
         if (notifyOperation) notifyOperation("Folder Created", `Folder "${name}" created successfully.`, true);
@@ -157,7 +158,7 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
 
   const handleRenameFolder = async (id, newName) => {
     try {
-      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders/${id}`, {
+      const res = await fetch(`${config.API_BASE_URL || ''}/api/folders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName })
@@ -183,11 +184,11 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
     const { id, name } = deleteModal;
     setDeleteModal({ isOpen: false, id: null, name: '' });
     try {
-      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${config.API_BASE_URL || ''}/api/folders/${id}`, { method: 'DELETE' });
       if (res.ok) {
         fetchFolders();
         if (selectedFolderId === id) {
-           onFolderSelect(null);
+          onFolderSelect(null);
         }
         if (notifyOperation) notifyOperation("Folder Deleted", `Folder "${name}" deleted permanently.`, true);
       } else {
@@ -223,12 +224,12 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
       <div className="tree-container">
         {repositories.length === 0 ? (
           <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' }}>
-            Loading repository tree...<br/>
-            <span style={{fontSize: '11px', opacity: 0.7}}>Ensure backend is running.</span>
+            Loading repository tree...<br />
+            <span style={{ fontSize: '11px', opacity: 0.7 }}>Ensure backend is running.</span>
           </div>
         ) : (
-          <RepoTree 
-            data={repositories} 
+          <RepoTree
+            data={repositories}
             onFolderSelect={onFolderSelect}
             selectedFolderId={selectedFolderId}
             onRenameFolder={handleRenameFolder}
@@ -243,15 +244,15 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
           />
         )}
       </div>
-      <input 
-        type="file" 
+      <input
+        type="file"
         multiple
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        style={{ display: 'none' }} 
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
       />
-      
-      <ConfirmModal 
+
+      <ConfirmModal
         isOpen={deleteModal.isOpen}
         title="Delete Folder"
         message={`Are you sure you want to permanently delete "${deleteModal.name}" and all its contents?`}
@@ -259,7 +260,8 @@ const Repository = ({ onCollapse, onFolderSelect, selectedFolderId, onFileUpload
         onCancel={() => setDeleteModal({ isOpen: false, id: null, name: '' })}
       />
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .repositories-section {
           height: 100%;
           display: flex;
@@ -303,10 +305,10 @@ const RepoTree = ({ data, onFolderSelect, selectedFolderId, onCreateFolder, onRe
   return (
     <div className="repo-tree">
       {data.map(node => (
-        <TreeNode 
-          key={node.id} 
-          node={node} 
-          depth={0} 
+        <TreeNode
+          key={node.id}
+          node={node}
+          depth={0}
           onFolderSelect={onFolderSelect}
           selectedFolderId={selectedFolderId}
           onCreateFolder={onCreateFolder}
@@ -366,7 +368,7 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
   // Requirement 4: All folders collapsed by default
   const [isOpen, setIsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
-  
+
   // Requirement 2: Inline Rename
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(node.label);
@@ -376,7 +378,7 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
   const handleDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Set drop effect
     e.dataTransfer.dropEffect = 'copy';
 
@@ -398,7 +400,7 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (hoverTimerRef.current) {
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = null;
@@ -463,8 +465,11 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
   const handleContextMenu = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    const options = [
+
+    const options = node.type === 'root' ? [
+      { label: 'Open', icon: <FolderOpen size={14} />, onClick: () => { onFolderSelect(node.id); setIsOpen(true); } },
+      { label: 'New Folder', icon: <FolderPlus size={14} />, onClick: () => onInitiateCreate(node.id) },
+    ] : [
       { label: 'Open', icon: <FolderOpen size={14} />, onClick: () => { onFolderSelect(node.id); setIsOpen(true); } },
       { label: 'New Folder', icon: <FolderPlus size={14} />, onClick: () => onInitiateCreate(node.id) },
       { label: 'Upload Files', icon: <Upload size={14} />, onClick: () => onUploadClick(node.id) },
@@ -498,7 +503,7 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
 
   return (
     <div className="tree-node" style={{ marginLeft: depth * 15 }}>
-      <div 
+      <div
         className={`tree-row ${isSelected ? 'selected' : ''}`}
         onContextMenu={handleContextMenu}
         onClick={() => {
@@ -531,7 +536,7 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
         <span className="node-icon">
           {node.type === 'root' ? '🗄️' : node.type === 'folder' ? '📁' : '📄'}
         </span>
-        
+
         {isEditing ? (
           <input
             ref={inputRef}
@@ -547,21 +552,21 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
           <span className="node-label">{node.label}</span>
         )}
       </div>
-      
+
       {isOpen && (
         <div className="node-children">
           {isCreatingChildHere && (
-            <GhostNode 
-              depth={depth + 1} 
-              onSubmit={(name) => onSubmitCreate(node.id, name)} 
-              onCancel={onCancelCreate} 
+            <GhostNode
+              depth={depth + 1}
+              onSubmit={(name) => onSubmitCreate(node.id, name)}
+              onCancel={onCancelCreate}
             />
           )}
           {hasChildren && node.children.map(child => (
-            <TreeNode 
-              key={child.id} 
-              node={child} 
-              depth={depth + 1} 
+            <TreeNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
               onFolderSelect={onFolderSelect}
               selectedFolderId={selectedFolderId}
               onCreateFolder={onCreateFolder}
@@ -580,14 +585,15 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
       )}
 
       {contextMenu && (
-        <ContextMenu 
-          x={contextMenu.x} 
-          y={contextMenu.y} 
-          options={contextMenu.options} 
-          onClose={() => setContextMenu(null)} 
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          options={contextMenu.options}
+          onClose={() => setContextMenu(null)}
         />
       )}
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .tree-row {
           display: flex;
           align-items: center;

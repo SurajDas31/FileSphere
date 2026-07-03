@@ -1,6 +1,5 @@
 export const config = {
-  FILE_API_BASE_URL: 'http://localhost:8080',
-  AUTH_API_BASE_URL: 'http://localhost:8081',
-  // Kept for backward compatibility if any third party component relies on it
-  API_BASE_URL: 'http://localhost:8080',
+  API_BASE_URL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:7000',
+  ENV: import.meta.env.ENV ?? 'development',
+  DEBUG: import.meta.env.DEBUG === 'true',
 };

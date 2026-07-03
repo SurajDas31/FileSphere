@@ -13,11 +13,13 @@ import UploadManager from './components/main/UploadManager';
 import { config } from './config';
 import ReactDOM from 'react-dom';
 import ToastContainer from './components/main/ToastContainer';
+import { motion, AnimatePresence } from 'framer-motion';
+import AnimatedBackground from './components/AnimatedBackground';
 
 const CopyMoveModal = ({ isOpen, filename, foldername, folders, actionType, onCopy, onMove, onCancel }) => {
   const [selectedFolderId, setSelectedFolderId] = useState('');
   const [hasInitialized, setHasInitialized] = useState(false);
-  
+
   useEffect(() => {
     if (!isOpen) {
       setHasInitialized(false);
@@ -90,8 +92,8 @@ const CopyMoveModal = ({ isOpen, filename, foldername, folders, actionType, onCo
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <p>Select target destination folder to {actionType === 'move' ? 'move' : 'copy'} <strong>{filename}</strong>:</p>
-              <select 
-                value={selectedFolderId} 
+              <select
+                value={selectedFolderId}
                 onChange={(e) => setSelectedFolderId(e.target.value)}
                 className="modal-select-dropdown"
               >
@@ -112,9 +114,9 @@ const CopyMoveModal = ({ isOpen, filename, foldername, folders, actionType, onCo
               <button className="btn-primary" onClick={handleMove} style={{ background: '#2ecc71' }}>Move</button>
             </>
           ) : (
-            <button 
-              className="btn-primary" 
-              onClick={actionType === 'move' ? handleMove : handleCopy} 
+            <button
+              className="btn-primary"
+              onClick={actionType === 'move' ? handleMove : handleCopy}
               style={{ background: actionType === 'move' ? '#2ecc71' : '#3498db' }}
             >
               Yes
@@ -122,7 +124,8 @@ const CopyMoveModal = ({ isOpen, filename, foldername, folders, actionType, onCo
           )}
         </div>
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .modal-overlay {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
@@ -217,7 +220,8 @@ const DeleteConfirmModal = ({ isOpen, filenamesString, onDelete, onCancel }) => 
           <button className="btn-primary" onClick={onDelete} style={{ background: '#e74c3c' }}>Delete</button>
         </div>
       </div>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .modal-overlay {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
@@ -282,21 +286,21 @@ function App() {
   const [authView, setAuthView] = useState('login');
   const [activeView, setActiveView] = useState('home');
   const [isRepoExpanded, setIsRepoExpanded] = useState(true);
-  const [isPreviewVisible, setIsPreviewVisible] = useState(true);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [isSidebarAutoHide, setIsSidebarAutoHide] = useState(false);
   const [isHoveringLeft, setIsHoveringLeft] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState('general');
-  
+
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [selectedFolderData, setSelectedFolderData] = useState(null);
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [selectedDocIds, setSelectedDocIds] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
-  
+
   const [uploads, setUploads] = useState([]);
   const [foldersList, setFoldersList] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -307,7 +311,7 @@ function App() {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/logout`, {
+        await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -332,7 +336,7 @@ function App() {
 
   const fetchUserProfile = async (token) => {
     try {
-      const res = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/me`, {
+      const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -341,10 +345,15 @@ function App() {
         const data = await res.json();
         setUserProfile(data);
         localStorage.setItem('user', JSON.stringify(data));
+      } else {
+        if (res.status === 401 || res.status === 403) {
+          handleLogout();
+          showToast('Session expired. Please sign in again.', 'error');
+        }
       }
 
       // Fetch user settings preferences
-      const settingsRes = await fetch(`${config.AUTH_API_BASE_URL || 'http://localhost:8081'}/api/auth/user/settings`, {
+      const settingsRes = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/user/settings`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -373,7 +382,7 @@ function App() {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-    
+
     // Load Dark Mode configuration from localStorage
     const savedDark = localStorage.getItem('theme_dark_mode');
     if (savedDark === 'true') {
@@ -423,10 +432,22 @@ function App() {
     }
   }, []);
 
+  // Listen for global unauthorized API errors to trigger redirect/logout
+  useEffect(() => {
+    const handleAuthError = () => {
+      handleLogout();
+      showToast('Session expired. Please sign in again.', 'error');
+    };
+    window.addEventListener('unauthorized-api-call', handleAuthError);
+    return () => {
+      window.removeEventListener('unauthorized-api-call', handleAuthError);
+    };
+  }, []);
+
   const showToast = (message, type = 'success') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts(prev => [...prev, { id, message, type }]);
-    
+
     // Auto-remove after 4 seconds
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -475,7 +496,7 @@ function App() {
   };
 
   const openCopyMoveModalForContext = (fileIds, filenamesString) => {
-    fetch(`${config.FILE_API_BASE_URL || ''}/api/folders`)
+    fetch(`${config.API_BASE_URL || ''}/api/folders`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -514,11 +535,11 @@ function App() {
       const isFolder = dragType === 'folder';
       showToast(isFolder ? "Copying folder structure..." : "Copying selected file(s)...", "info");
       triggerPushNotification(isFolder ? "Folder Copy Started" : "File Copy Started", "Copying items in background...");
-      
+
       const promises = fileIds.map(id => {
-        const url = isFolder 
-          ? `${config.FILE_API_BASE_URL || ''}/api/folders/${id}/copy`
-          : `${config.FILE_API_BASE_URL || ''}/api/files/${id}/copy`;
+        const url = isFolder
+          ? `${config.API_BASE_URL || ''}/api/folders/${id}/copy`
+          : `${config.API_BASE_URL || ''}/api/files/${id}/copy`;
         return fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -528,7 +549,7 @@ function App() {
       const results = await Promise.all(promises);
       if (results.every(res => res.ok)) {
         // Trigger page refresh or repo tree reload
-        window.location.reload(); 
+        window.location.reload();
       } else {
         notifyOperation("Copy Failed", "Failed to copy some items.", false);
       }
@@ -550,16 +571,16 @@ function App() {
       const isFolder = dragType === 'folder';
       showToast(isFolder ? "Moving folder..." : "Moving selected file(s)...", "info");
       triggerPushNotification(isFolder ? "Folder Move Started" : "File Move Started", "Moving items in background...");
-      
+
       const promises = fileIds.map(id => {
-        const url = isFolder 
-          ? `${config.FILE_API_BASE_URL || ''}/api/folders/${id}/move`
-          : `${config.FILE_API_BASE_URL || ''}/api/files/${id}`;
-        
+        const url = isFolder
+          ? `${config.API_BASE_URL || ''}/api/folders/${id}/move`
+          : `${config.API_BASE_URL || ''}/api/files/${id}`;
+
         // Go backend folder move accepts JSON struct with parentId
         // Go backend file update accepts JSON struct with folderId
-        const bodyObj = isFolder 
-          ? { parentId: destFolderId } 
+        const bodyObj = isFolder
+          ? { parentId: destFolderId }
           : { folderId: destFolderId };
 
         return fetch(url, {
@@ -594,9 +615,9 @@ function App() {
     try {
       showToast("Deleting selected file(s)...", "info");
       triggerPushNotification("File Deletion Started", "Deleting selected file(s) permanently...");
-      
+
       const promises = fileIds.map(fileId =>
-        fetch(`${config.FILE_API_BASE_URL || ''}/api/files/${fileId}`, {
+        fetch(`${config.API_BASE_URL || ''}/api/files/${fileId}`, {
           method: 'DELETE'
         })
       );
@@ -630,7 +651,7 @@ function App() {
     setSelectedDocId(null);
     setSelectedDocIds([]);
     setSelectedFolderData(null);
-    
+
     if (!folderId) {
       setDocuments([]);
       return;
@@ -639,10 +660,10 @@ function App() {
     // Fetch from real API
     setLoadingFiles(true);
     try {
-      const res = await fetch(`${config.FILE_API_BASE_URL || ''}/api/folders/${folderId}`);
+      const res = await fetch(`${config.API_BASE_URL || ''}/api/folders/${folderId}`);
       if (res.ok) {
         const data = await res.json();
-        
+
         // Save folder metadata for the properties panel
         setSelectedFolderData({
           id: data.id,
@@ -661,7 +682,7 @@ function App() {
           owner: f.owner,
           tags: f.tags,
           dateModified: new Date(f.createdAt).toLocaleDateString(),
-          url: `${config.FILE_API_BASE_URL || ''}/api/files/${f.id}/content`
+          url: `${config.API_BASE_URL || ''}/api/files/${f.id}/content`
         }));
         setDocuments(mappedFiles);
       } else {
@@ -676,14 +697,27 @@ function App() {
   };
 
   const handleDocClick = (id) => {
-    setSelectedDocId(selectedDocId === id ? null : id);
+    const isNewSelect = selectedDocId !== id;
+    setSelectedDocId(isNewSelect ? id : null);
     setSelectedDocIds([id]);
+    if (isNewSelect) {
+      setIsPreviewVisible(true);
+    }
   };
 
   const handleTogglePreview = () => {
     setIsResizing(true);
     setIsPreviewVisible(!isPreviewVisible);
     setTimeout(() => setIsResizing(false), 450);
+  };
+
+  const generateId = () => {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+
+    return [...bytes]
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("");
   };
 
   const handleFileUpload = (filesArray, targetFolderId) => {
@@ -700,7 +734,7 @@ function App() {
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       return {
         id: Math.random().toString(36).substr(2, 9),
-        uploadId: crypto.randomUUID(), // Need a unique ID for the backend temp folder
+        uploadId: generateId(), // Need a unique ID for the backend temp folder
         file: file,
         targetFolderId: targetFolderId,
         status: 'uploading', // uploading, paused, completed, error
@@ -731,48 +765,80 @@ function App() {
     }
   };
 
+  const handleUploadError = (error) => {
+    notifyOperation("Upload Failed", error, false);
+  };
+
   const activeDoc = documents.find(d => d.id === selectedDocId);
 
   if (!isAuthenticated) {
-    return authView === 'login' ? (
-      <Login 
-        onLogin={() => {
-          const cached = localStorage.getItem('user');
-          if (cached) {
-            try {
-              setUserProfile(JSON.parse(cached));
-            } catch (err) {}
-          }
-          setIsAuthenticated(true);
-          // fetch fresh copy too
-          const token = localStorage.getItem('token');
-          if (token) {
-            fetchUserProfile(token);
-          }
-        }} 
-        onSignupClick={() => setAuthView('signup')} 
-      />
-    ) : (
-      <Signup 
-        onSignup={() => setIsAuthenticated(true)} 
-        onBackToLogin={() => setAuthView('login')} 
-      />
+    return (
+      <>
+        <AnimatedBackground />
+        <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <AnimatePresence mode="wait">
+            {authView === 'login' ? (
+              <motion.div
+                key="login"
+                initial={{ opacity: 0, x: -80, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 80, scale: 0.96 }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Login
+                  onLogin={() => {
+                    const cached = localStorage.getItem('user');
+                    if (cached) {
+                      try {
+                        setUserProfile(JSON.parse(cached));
+                      } catch (err) { }
+                    }
+                    setIsAuthenticated(true);
+                    // fetch fresh copy too
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                      fetchUserProfile(token);
+                    }
+                  }}
+                  onSignupClick={() => setAuthView('signup')}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="signup"
+                initial={{ opacity: 0, x: 80, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -80, scale: 0.96 }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Signup
+                  onSignup={() => setIsAuthenticated(true)}
+                  onBackToLogin={() => setAuthView('login')}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </>
     );
   }
 
   return (
     <div className="app-container">
+      <AnimatedBackground />
       <Header />
       <div className={`workspace ${isResizing ? 'is-resizing' : ''} ${isSidebarMenuOpen ? 'sidebar-menu-open' : ''}`}>
         <Allotment>
           {/* Fixed Sidebar */}
-          <Allotment.Pane 
-            preferredSize={isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft ? 0 : 70} 
-            minSize={isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft ? 0 : 70} 
+          <Allotment.Pane
+            preferredSize={isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft ? 0 : 70}
+            minSize={isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft ? 0 : 70}
             maxSize={70}
             visible={!(isSidebarAutoHide && !isSidebarMenuOpen && !isHoveringLeft)}
           >
-            <Sidebar 
+            <Sidebar
               activeView={activeView}
               onViewChange={(view) => {
                 if (view === 'settings') {
@@ -782,7 +848,7 @@ function App() {
                   setActiveView(view);
                   if (view === 'repositories') setIsRepoExpanded(true);
                 }
-              }} 
+              }}
               onMenuToggle={(isOpen) => setIsSidebarMenuOpen(isOpen)}
               onLogout={handleLogout}
               userProfile={userProfile}
@@ -796,77 +862,95 @@ function App() {
           {/* Repository & Properties Section */}
           {activeView === 'repositories' && isRepoExpanded && (
             <Allotment.Pane preferredSize={280} minSize={200} maxSize={500}>
-              <div key={activeView} className="view-transition-wrapper h-full">
-                <Allotment vertical>
-                  <Allotment.Pane preferredSize="60%">
-                    <Repository 
-                      onCollapse={() => setIsRepoExpanded(false)} 
-                      onFolderSelect={handleFolderSelect}
-                      selectedFolderId={selectedFolderId}
-                      onFileUpload={handleFileUpload}
-                      onFileDrop={handleFileDrop}
-                      showToast={showToast}
-                      notifyOperation={notifyOperation}
-                    />
-                  </Allotment.Pane>
-                  <Allotment.Pane>
-                    <FileProperties data={activeDoc || selectedFolderData || {}} />
-                  </Allotment.Pane>
-                </Allotment>
-              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeView}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                  className="h-full"
+                >
+                  <Allotment vertical>
+                    <Allotment.Pane preferredSize="60%">
+                      <Repository
+                        onCollapse={() => setIsRepoExpanded(false)}
+                        onFolderSelect={handleFolderSelect}
+                        selectedFolderId={selectedFolderId}
+                        onFileUpload={handleFileUpload}
+                        onFileDrop={handleFileDrop}
+                        showToast={showToast}
+                        notifyOperation={notifyOperation}
+                      />
+                    </Allotment.Pane>
+                    <Allotment.Pane>
+                      <FileProperties data={activeDoc || selectedFolderData || {}} />
+                    </Allotment.Pane>
+                  </Allotment>
+                </motion.div>
+              </AnimatePresence>
             </Allotment.Pane>
           )}
 
           {/* Main Content Area */}
           <Allotment.Pane>
-            <div key={activeView} className="view-transition-wrapper h-full">
-              {activeView === 'repositories' ? (
-                <Allotment>
-                  <Allotment.Pane preferredSize="60%">
-                    <FileList 
-                      data={documents} 
-                      selectedId={selectedDocId}
-                      selectedDocIds={selectedDocIds}
-                      setSelectedDocIds={setSelectedDocIds}
-                      onDocClick={handleDocClick}
-                      isPreviewVisible={isPreviewVisible} 
-                      setIsPreviewVisible={handleTogglePreview}
-                      isLoading={loadingFiles}
-                      onFileUpdated={() => handleFolderSelect(selectedFolderId)}
-                      onDeleteFiles={handleRequestDelete}
-                      onCopyFiles={openCopyMoveModalForContext}
-                      onMoveFiles={openCopyMoveModalForContext}
-                      onFileUpload={handleFileUpload}
-                      currentFolderId={selectedFolderId}
-                      notifyOperation={notifyOperation}
-                    />
-                  </Allotment.Pane>
-                  <Allotment.Pane preferredSize="40%" visible={isPreviewVisible}>
-                    <FileViewer data={activeDoc} />
-                  </Allotment.Pane>
-                </Allotment>
-              ) : (
-                <div className="blank-page glass-panel">
-                  <div className="blank-content">
-                    <h2>{activeView.charAt(0).toUpperCase() + activeView.slice(1).replace('-', ' ')}</h2>
-                    <p>This section is under development.</p>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeView}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className="h-full"
+              >
+                {activeView === 'repositories' ? (
+                  <Allotment>
+                    <Allotment.Pane preferredSize="60%">
+                      <FileList
+                        data={documents}
+                        selectedId={selectedDocId}
+                        selectedDocIds={selectedDocIds}
+                        setSelectedDocIds={setSelectedDocIds}
+                        onDocClick={handleDocClick}
+                        isPreviewVisible={isPreviewVisible}
+                        setIsPreviewVisible={handleTogglePreview}
+                        isLoading={loadingFiles}
+                        onFileUpdated={() => handleFolderSelect(selectedFolderId)}
+                        onDeleteFiles={handleRequestDelete}
+                        onCopyFiles={openCopyMoveModalForContext}
+                        onMoveFiles={openCopyMoveModalForContext}
+                        onFileUpload={handleFileUpload}
+                        currentFolderId={selectedFolderId}
+                        notifyOperation={notifyOperation}
+                      />
+                    </Allotment.Pane>
+                    <Allotment.Pane preferredSize="40%" visible={isPreviewVisible}>
+                      <FileViewer data={activeDoc} />
+                    </Allotment.Pane>
+                  </Allotment>
+                ) : (
+                  <div className="blank-page glass-panel">
+                    <div className="blank-content">
+                      <h2>{activeView.charAt(0).toUpperCase() + activeView.slice(1).replace('-', ' ')}</h2>
+                      <p>This section is under development.</p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </Allotment.Pane>
         </Allotment>
       </div>
- 
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
         onClose={() => {
           setIsSettingsOpen(false);
           const token = localStorage.getItem('token');
           if (token) {
             fetchUserProfile(token);
           }
-        }} 
+        }}
         userProfile={userProfile}
         initialCategory={settingsCategory}
         onProfileUpdate={(updatedUser) => {
@@ -874,13 +958,14 @@ function App() {
           localStorage.setItem('user', JSON.stringify(updatedUser));
         }}
       />
-      
-      <UploadManager 
-        uploads={uploads} 
-        setUploads={setUploads} 
-        onUploadComplete={handleUploadComplete} 
+
+      <UploadManager
+        uploads={uploads}
+        setUploads={setUploads}
+        onUploadComplete={handleUploadComplete}
+        onUploadError={handleUploadError}
       />
- 
+
       <CopyMoveModal
         isOpen={copyMoveModal.isOpen}
         filename={copyMoveModal.filename}
@@ -900,7 +985,8 @@ function App() {
 
       <ToastContainer toasts={toasts} />
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .app-container {
           height: 100vh;
           display: flex;

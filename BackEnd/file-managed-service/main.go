@@ -53,8 +53,8 @@ func main() {
 		api.DELETE("/files/:id", controllers.DeleteFile)
 	}
 
-	log.Println("Server running on port 8080")
-	if err := r.Run(":8080"); err != nil {
+	log.Println("Server running on port 7001")
+	if err := r.Run(":7001"); err != nil {
 		log.Fatal("Server failed to start:", err)
 	}
 }
