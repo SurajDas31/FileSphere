@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { FolderPlus, Upload, Edit, Trash, FolderOpen, X } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import ContextMenu from './ContextMenu';
+import { AnimatedRootIcon, AnimatedFolderIcon, AnimatedFileIcon } from '../AnimatedIcons';
 import { config } from '../../config';
 
 const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }) => {
@@ -534,7 +535,13 @@ const TreeNode = ({ node, depth, onFolderSelect, selectedFolderId, onCreateFolde
           {hasChildren || isCreatingChildHere ? (isOpen ? '⌄' : '›') : <span className="toggle-spacer" />}
         </span>
         <span className="node-icon">
-          {node.type === 'root' ? '🗄️' : node.type === 'folder' ? '📁' : '📄'}
+          {node.type === 'root' ? (
+            <AnimatedRootIcon size={18} />
+          ) : node.type === 'folder' ? (
+            <AnimatedFolderIcon size={18} active={selectedFolderId === node.id} />
+          ) : (
+            <AnimatedFileIcon size={18} />
+          )}
         </span>
 
         {isEditing ? (

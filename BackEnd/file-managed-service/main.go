@@ -49,6 +49,7 @@ func main() {
 		api.GET("/files/:id/content", controllers.StreamFile)
 		api.DELETE("/files/:id/preview", controllers.CleanupPreviewFile)
 		api.PUT("/files/:id", controllers.UpdateFile)
+		api.PUT("/files/:id/content", controllers.UpdateFileContent)
 		api.POST("/files/:id/copy", controllers.CopyFile)
 		api.DELETE("/files/:id", controllers.DeleteFile)
 	}

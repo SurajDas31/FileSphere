@@ -18,7 +18,7 @@ public class UserSetting {
     private String theme = "light"; // default
 
     @Column(name = "glassmorphism", nullable = false)
-    private boolean glassmorphism = true; // default
+    private boolean glassmorphism = false; // default
 
     @Column(name = "accent_color", nullable = false)
     private String accentColor = "blue"; // default

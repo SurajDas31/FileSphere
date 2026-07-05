@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, FileText, Edit, Copy, Trash, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import ContextMenu from './ContextMenu';
+import { AnimatedDocIcon } from '../AnimatedIcons';
 import { config } from '../../config';
 
 const getFileType = (filename, type) => {
@@ -382,9 +383,7 @@ const FileList = ({
                     </td>
                     <td className="title-cell">
                       <div className="title-cell-content">
-                        <div className={`doc-icon ${resolvedType}`}>
-                          {resolvedType === 'pdf' ? 'PDF' : resolvedType === 'word' ? 'DOC' : resolvedType === 'image' ? 'IMG' : resolvedType === 'video' ? 'VID' : resolvedType === 'excel' ? 'XLS' : resolvedType === 'zip' ? 'ZIP' : resolvedType === 'text' ? 'TXT' : 'FILE'}
-                        </div>
+                        <AnimatedDocIcon type={resolvedType} size={18} />
                         {editingFileId === doc.id ? (
                           <input
                             type="text"

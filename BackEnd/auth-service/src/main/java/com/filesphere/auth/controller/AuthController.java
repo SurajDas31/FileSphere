@@ -1,9 +1,8 @@
 package com.filesphere.auth.controller;
 
-import com.filesphere.auth.model.User;
-import com.filesphere.auth.model.UserResponse;
-import com.filesphere.auth.repository.UserRepository;
-import com.filesphere.auth.security.JwtService;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,11 +13,21 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.filesphere.auth.model.User;
+import com.filesphere.auth.model.UserResponse;
+import com.filesphere.auth.repository.UserRepository;
+import com.filesphere.auth.security.JwtService;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")

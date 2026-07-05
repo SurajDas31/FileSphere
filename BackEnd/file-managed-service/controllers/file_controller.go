@@ -788,3 +788,100 @@ func getMimeType(filename string) string {
 		return "application/octet-stream"
 	}
 }
+
+// UpdateFileContent handles PUT /api/files/:id/content
+func UpdateFileContent(c *gin.Context) {
+	tenantID, err := middleware.GetTenantID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: Tenant ID missing"})
+		return
+	}
+
+	id := c.Param("id")
+	var file models.File
+
+	if err := database.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&file).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+		return
+	}
+
+	type DBTenant struct {
+		TenantKey        int64  `gorm:"column:tenant_key"`
+		MaxFileSizeBytes *int64 `gorm:"column:max_file_size_bytes"`
+	}
+	var dbTenant DBTenant
+	if err := database.DB.Table("tenants").Where("tenant_key = ?", tenantID).First(&dbTenant).Error; err == nil && dbTenant.MaxFileSizeBytes != nil {
+		if int64(len(bodyBytes)) > *dbTenant.MaxFileSizeBytes {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error": fmt.Sprintf("File size exceeds tenant limit of %d MB", *dbTenant.MaxFileSizeBytes / 1024 / 1024),
+			})
+			return
+		}
+	}
+
+	internalName := filepath.Base(file.StoragePath)
+	tempLocalPath := filepath.Join(StoragePath, internalName)
+
+	finalFile, err := os.OpenFile(tempLocalPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open temporary file for update"})
+		return
+	}
+	defer finalFile.Close()
+
+	iv := make([]byte, aes.BlockSize)
+	if _, err := rand.Read(iv); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate encryption IV"})
+		return
+	}
+	finalFile.Write(iv)
+
+	block, err := aes.NewCipher(getEncryptionKey())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Encryption cipher error"})
+		return
+	}
+	stream := cipher.NewCTR(block, iv)
+	cryptoWriter := &cipher.StreamWriter{S: stream, W: finalFile}
+
+	gzWriter := gzip.NewWriter(cryptoWriter)
+
+	if _, err := gzWriter.Write(bodyBytes); err != nil {
+		gzWriter.Close()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write compressed and encrypted data"})
+		return
+	}
+
+	if err := gzWriter.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to finalize compression"})
+		return
+	}
+
+	finalFile.Close()
+
+	storageSvc := GetStorageService()
+	actualStoragePath, err := storageSvc.Put(c.Request.Context(), tempLocalPath, internalName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store updated file in storage provider"})
+		return
+	}
+
+	if actualStoragePath != tempLocalPath {
+		_ = os.Remove(tempLocalPath)
+	}
+
+	file.StoragePath = actualStoragePath
+	file.Size = int64(len(bodyBytes))
+	if err := database.DB.Save(&file).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update file metadata in database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, file)
+}

@@ -187,10 +187,18 @@ const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout, userProfile
           padding: 8px;
           border-radius: 12px;
         }
+        .sidebar-icon-wrapper svg {
+          transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.3s ease, filter 0.3s ease;
+        }
         .sidebar-icon-wrapper:hover {
           color: var(--text-main);
-          transform: scale(1.1);
+          transform: scale(1.08);
           background: rgba(255, 255, 255, 0.05);
+        }
+        .sidebar-icon-wrapper:hover svg {
+          transform: translateY(-2px) rotate(8deg);
+          color: var(--accent);
+          filter: drop-shadow(0 2px 8px rgba(52, 152, 219, 0.4));
         }
         body.dark-mode .sidebar-icon-wrapper:hover {
           background: rgba(255, 255, 255, 0.1);
@@ -213,8 +221,8 @@ const Sidebar = ({ activeView, onViewChange, onMenuToggle, onLogout, userProfile
           transition: all 0.3s ease;
         }
         .sidebar-profile-img {
-          width: 28px;
-          height: 28px;
+          width: 32px;
+          height: 32px;
           border-radius: 50%;
           border: 2px solid transparent;
           transition: all 0.3s ease;

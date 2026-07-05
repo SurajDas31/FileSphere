@@ -85,9 +85,9 @@ const Header = ({ onViewAllNotifications }) => {
       <div className="header-right">
         <Notifications onViewAll={onViewAllNotifications} />
 
-        <button className="header-btn" onClick={toggleDarkMode} title={isDarkMode ? "Light Mode" : "Dark Mode"}>
+        {/* <button className="header-btn" onClick={toggleDarkMode} title={isDarkMode ? "Light Mode" : "Dark Mode"}>
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+        </button> */}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `

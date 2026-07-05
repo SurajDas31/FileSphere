@@ -15,6 +15,7 @@ import ReactDOM from 'react-dom';
 import ToastContainer from './components/main/ToastContainer';
 import { motion, AnimatePresence } from 'framer-motion';
 import AnimatedBackground from './components/AnimatedBackground';
+import MaintenancePage from './components/MaintenancePage';
 
 const CopyMoveModal = ({ isOpen, filename, foldername, folders, actionType, onCopy, onMove, onCancel }) => {
   const [selectedFolderId, setSelectedFolderId] = useState('');
@@ -283,6 +284,7 @@ const DeleteConfirmModal = ({ isOpen, filenamesString, onDelete, onCancel }) => 
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isBackendDown, setIsBackendDown] = useState(false);
   const [authView, setAuthView] = useState('login');
   const [activeView, setActiveView] = useState('home');
   const [isRepoExpanded, setIsRepoExpanded] = useState(true);
@@ -334,6 +336,23 @@ function App() {
     setIsAuthenticated(false);
   };
 
+  const checkBackendHealth = async () => {
+    try {
+      const res = await fetch(`${config.API_BASE_URL || ''}/api/folders`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.status >= 502 && res.status <= 504) {
+        setIsBackendDown(true);
+        return false;
+      }
+      setIsBackendDown(false);
+      return true;
+    } catch (e) {
+      setIsBackendDown(true);
+      return false;
+    }
+  };
+
   const fetchUserProfile = async (token) => {
     try {
       const res = await fetch(`${config.API_BASE_URL || 'http://localhost:7002'}/api/auth/me`, {
@@ -345,8 +364,11 @@ function App() {
         const data = await res.json();
         setUserProfile(data);
         localStorage.setItem('user', JSON.stringify(data));
+        setIsBackendDown(false);
       } else {
-        if (res.status === 401 || res.status === 403) {
+        if (res.status >= 502 && res.status <= 504) {
+          setIsBackendDown(true);
+        } else if (res.status === 401 || res.status === 403) {
           handleLogout();
           showToast('Session expired. Please sign in again.', 'error');
         }
@@ -366,19 +388,32 @@ function App() {
         } else {
           document.body.classList.remove('dark-mode');
         }
-        if (settingsData.glassmorphism) {
-          document.body.classList.add('glassmorphic-ui');
-        } else {
-          document.body.classList.remove('glassmorphic-ui');
+        // if (settingsData.glassmorphism) {
+        //   document.body.classList.add('glassmorphic-ui');
+        // } else {
+        //   document.body.classList.remove('glassmorphic-ui');
+        // }
+        document.body.classList.remove('glassmorphic-ui');
+        // Apply saved accent color on page load
+        const accentHex = settingsData.accentColor === 'blue' ? '#3498db' :
+                          settingsData.accentColor === 'purple' ? '#9b59b6' :
+                          settingsData.accentColor === 'green' ? '#2ecc71' : '#e74c3c';
+        document.documentElement.style.setProperty('--accent', accentHex);
+        setIsBackendDown(false);
+      } else {
+        if (settingsRes.status >= 502 && settingsRes.status <= 504) {
+          setIsBackendDown(true);
         }
       }
     } catch (e) {
       console.error("Failed to load user profile or settings", e);
+      setIsBackendDown(true);
     }
   };
 
   // Request browser notification permission on mount
   useEffect(() => {
+    checkBackendHealth();
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
@@ -637,12 +672,13 @@ function App() {
 
   // Initialize Glassmorphism theme
   useEffect(() => {
-    const isGlass = localStorage.getItem('ui_glassmorphism') !== 'false';
-    if (isGlass) {
-      document.body.classList.add('glassmorphic-ui');
-    } else {
-      document.body.classList.remove('glassmorphic-ui');
-    }
+    // const isGlass = localStorage.getItem('ui_glassmorphism') === 'true';
+    // if (isGlass) {
+    //   document.body.classList.add('glassmorphic-ui');
+    // } else {
+    //   document.body.classList.remove('glassmorphic-ui');
+    // }
+    document.body.classList.remove('glassmorphic-ui');
   }, []);
 
   // Fetch files when a folder is selected
@@ -771,6 +807,10 @@ function App() {
 
   const activeDoc = documents.find(d => d.id === selectedDocId);
 
+  if (isBackendDown) {
+    return <MaintenancePage onRetry={checkBackendHealth} />;
+  }
+
   if (!isAuthenticated) {
     return (
       <>
@@ -828,7 +868,10 @@ function App() {
   return (
     <div className="app-container">
       <AnimatedBackground />
-      <Header />
+      <Header onViewAllNotifications={() => {
+        setSettingsCategory('notifications');
+        setIsSettingsOpen(true);
+      }} />
       <div className={`workspace ${isResizing ? 'is-resizing' : ''} ${isSidebarMenuOpen ? 'sidebar-menu-open' : ''}`}>
         <Allotment>
           {/* Fixed Sidebar */}
@@ -925,7 +968,7 @@ function App() {
                       />
                     </Allotment.Pane>
                     <Allotment.Pane preferredSize="40%" visible={isPreviewVisible}>
-                      <FileViewer data={activeDoc} />
+                      <FileViewer data={activeDoc} notifyOperation={notifyOperation} />
                     </Allotment.Pane>
                   </Allotment>
                 ) : (

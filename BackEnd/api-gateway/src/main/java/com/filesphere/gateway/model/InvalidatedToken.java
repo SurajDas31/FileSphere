@@ -10,6 +10,7 @@ import java.util.Date;
 @Table(name = "invalidated_tokens")
 public class InvalidatedToken {
     @Id
+    @Column(columnDefinition = "TEXT")
     private String token;
 
     @Column(name = "expiry_date", nullable = false)

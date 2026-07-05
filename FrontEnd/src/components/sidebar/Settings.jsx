@@ -60,6 +60,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
   const [isDragCropper, setIsDragCropper] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [cropImageObj, setCropImageObj] = useState(null);
+  const [cropDisplaySize, setCropDisplaySize] = useState({ width: 0, height: 0 });
 
   const isSuperAdmin = userProfile?.role === 'SUPER_ADMIN';
 
@@ -395,6 +396,18 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
         setCropSrc(event.target.result);
         setCropZoom(1);
         setCropOffset({ x: 0, y: 0 });
+
+        // Calculate display size to fit the 200px crop area (which is centered inside the 280px viewport)
+        const minDimension = 200;
+        const ratio = img.width / img.height;
+        let w = minDimension;
+        let h = minDimension;
+        if (ratio > 1) {
+          w = minDimension * ratio;
+        } else {
+          h = minDimension / ratio;
+        }
+        setCropDisplaySize({ width: w, height: h });
       };
       img.src = event.target.result;
     };
@@ -421,16 +434,28 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
       ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
       ctx.clip();
 
-      // Calculate how to draw the image based on zoom and offset
-      // Natural min dimension
-      const natMin = Math.min(cropImageObj.width, cropImageObj.height);
-      const drawWidth = (cropImageObj.width / natMin) * size * cropZoom;
-      const drawHeight = (cropImageObj.height / natMin) * size * cropZoom;
+      // Viewport size is 280px. Crop circle is 200px (diameter) centered in the 280px viewport (40px padding from all sides).
+      // Calculate where the image top-left is relative to the viewport (280x280) when centered, zoomed, and translated
+      const imgWidthOnScreen = cropDisplaySize.width * cropZoom;
+      const imgHeightOnScreen = cropDisplaySize.height * cropZoom;
+      
+      const imgLeft0 = (280 - imgWidthOnScreen) / 2;
+      const imgTop0 = (280 - imgHeightOnScreen) / 2;
+      
+      const imgLeft = imgLeft0 + cropOffset.x;
+      const imgTop = imgTop0 + cropOffset.y;
 
-      const x = (size - drawWidth) / 2 + cropOffset.x;
-      const y = (size - drawHeight) / 2 + cropOffset.y;
+      // Position relative to the top-left of the 200px crop area (which is at 40px, 40px in viewport)
+      const xInCrop = imgLeft - 40;
+      const yInCrop = imgTop - 40;
 
-      ctx.drawImage(cropImageObj, x, y, drawWidth, drawHeight);
+      // Scale to canvas size (size represents the 200px crop area)
+      const drawWidth = imgWidthOnScreen * (size / 200);
+      const drawHeight = imgHeightOnScreen * (size / 200);
+      const drawX = xInCrop * (size / 200);
+      const drawY = yInCrop * (size / 200);
+
+      ctx.drawImage(cropImageObj, drawX, drawY, drawWidth, drawHeight);
 
       canvas.toBlob(async (blob) => {
         if (!blob) {
@@ -770,7 +795,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                   <option value="dark">Dark</option>
                 </select>
               </div>
-              <div className="settings-option">
+              {/* <div className="settings-option">
                 <div>
                   <label>Glassmorphism Effect</label>
                   <p>Enable frosted glass panels and background blur.</p>
@@ -787,7 +812,7 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                   />
                   <span className="slider round"></span>
                 </label>
-              </div>
+              </div> */}
               <div className="settings-option">
                 <div>
                   <label>Accent Color</label>
@@ -1074,6 +1099,8 @@ const SettingsModal = ({ isOpen, onClose, userProfile, onProfileUpdate, initialC
                 alt="Crop preview"
                 className="crop-preview-image"
                 style={{
+                  width: `${cropDisplaySize.width}px`,
+                  height: `${cropDisplaySize.height}px`,
                   transform: `translate(${cropOffset.x}px, ${cropOffset.y}px) scale(${cropZoom})`,
                   cursor: isDragCropper ? 'grabbing' : 'grab'
                 }}
