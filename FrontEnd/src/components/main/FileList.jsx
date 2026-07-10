@@ -15,6 +15,7 @@ const getFileType = (filename, type) => {
   if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) return 'video';
   if (['zip', 'rar'].includes(ext)) return 'zip';
   if (['txt', 'md', 'csv'].includes(ext)) return 'text';
+  if (['obj', 'fbx', 'stl', 'blend', 'step', 'iges', 'glb', 'gltf'].includes(ext)) return '3d';
   return 'unknown';
 };
 
@@ -383,7 +384,21 @@ const FileList = ({
                     </td>
                     <td className="title-cell">
                       <div className="title-cell-content">
-                        <AnimatedDocIcon type={resolvedType} size={18} />
+                        {doc.status === 'Processing' ? (
+                          <div className="spinning-loader-icon" style={{
+                            width: '16px',
+                            height: '16px',
+                            border: '2px solid rgba(255, 255, 255, 0.2)',
+                            borderTop: '2px solid var(--accent)',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite',
+                            marginRight: '8px',
+                            display: 'inline-block',
+                            verticalAlign: 'middle'
+                          }} />
+                        ) : (
+                          <AnimatedDocIcon type={resolvedType} size={18} />
+                        )}
                         {editingFileId === doc.id ? (
                           <input
                             type="text"
@@ -443,6 +458,10 @@ const FileList = ({
 
       <style dangerouslySetInnerHTML={{
         __html: `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
         .document-list {
           height: 100%;
           display: flex;

@@ -36,14 +36,14 @@ const FileProperties = ({ data = {} }) => {
     ...(!isFolder ? [{ label: 'Size', value: formatBytes(data?.size) }] : []),
     { label: 'Owner', value: data?.owner || '-' },
     // Only show file-specific metadata if it's a file
-    ...(!isFolder ? [
-      { label: 'Tags', value: data?.tags || '-' },
-      { label: 'QR Code', value: data?.qrCode || '-' },
-      { label: 'Version', value: data?.version || '-' },
-      { label: 'Version History', value: '-' },
-    ] : []),
+    // ...(!isFolder ? [
+    //   { label: 'Tags', value: data?.tags || '-' },
+    //   { label: 'QR Code', value: data?.qrCode || '-' },
+    //   { label: 'Version', value: data?.version || '-' },
+    //   { label: 'Version History', value: '-' },
+    // ] : []),
     { label: 'Created on', value: data?.dateModified || data?.createdOn || '-' },
-    { label: 'Published on', value: data?.publishedOn || '-' },
+    // { label: 'Published on', value: data?.publishedOn || '-' },
   ];
 
   return (

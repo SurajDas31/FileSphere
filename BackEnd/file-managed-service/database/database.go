@@ -42,10 +42,13 @@ func Connect() {
 	log.Println("Database connection successfully opened")
 
 	// Auto Migrate the schema
-	err = db.AutoMigrate(&models.Folder{}, &models.File{})
+	err = db.AutoMigrate(&models.Folder{}, &models.File{}, &models.FileVersion{})
 	if err != nil {
 		log.Fatal("Failed to migrate database. \n", err)
 	}
+
+	// Drop unique constraint on storage_path for CAS mapping
+	db.Exec("ALTER TABLE files DROP CONSTRAINT IF EXISTS files_storage_path_key")
 
 	log.Println("Database migration completed")
 	DB = db

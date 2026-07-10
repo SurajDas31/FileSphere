@@ -45,6 +45,10 @@ const IconDefs = () => (
         <stop offset="0%" stopColor="#13e0db" />
         <stop offset="100%" stopColor="#08a09b" />
       </linearGradient>
+      <linearGradient id="threeDGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#bf55ec" />
+        <stop offset="100%" stopColor="#8e44ad" />
+      </linearGradient>
       <linearGradient id="unknownGrad" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#e65c00" />
         <stop offset="100%" stopColor="#F9D423" />
@@ -161,6 +165,7 @@ export const AnimatedDocIcon = ({ type = 'unknown', size = 24 }) => {
       case 'zip': return 'url(#zipGrad)';
       case 'text': return 'url(#textGrad)';
       case 'html': return 'url(#htmlGrad)';
+      case '3d': return 'url(#threeDGrad)';
       default: return 'url(#unknownGrad)';
     }
   };
@@ -246,6 +251,17 @@ export const AnimatedDocIcon = ({ type = 'unknown', size = 24 }) => {
             {/* Drawing tag brackets < > */}
             <path d="M8 13L6 15L8 17" stroke={getGradient(type)} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="h-left" />
             <path d="M16 13L18 15L16 17" stroke={getGradient(type)} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="h-right" />
+          </g>
+        )}
+
+        {type === '3d' && (
+          <g className="threed-decor">
+            {/* Top face */}
+            <path d="M12 11L16 9L12 7L8 9L12 11Z" fill={getGradient(type)} fillOpacity="0.4" stroke={getGradient(type)} strokeWidth="1" />
+            {/* Left face */}
+            <path d="M8 9V14L12 16V11L8 9Z" fill={getGradient(type)} fillOpacity="0.25" stroke={getGradient(type)} strokeWidth="1" />
+            {/* Right face */}
+            <path d="M12 11V16L16 14V9L12 11Z" fill={getGradient(type)} fillOpacity="0.5" stroke={getGradient(type)} strokeWidth="1" />
           </g>
         )}
 

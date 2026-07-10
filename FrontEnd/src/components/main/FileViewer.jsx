@@ -14,7 +14,10 @@ import {
   Edit3,
   Save,
   X,
-  BarChart3
+  BarChart3,
+  History,
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 import { config } from '../../config';
 import { AnimatedDocIcon, AnimatedFolderIcon } from '../AnimatedIcons';
@@ -30,6 +33,7 @@ const getFileType = (filename) => {
   if (['zip', 'rar'].includes(ext)) return 'zip';
   if (['txt', 'md', 'csv'].includes(ext)) return 'text';
   if (['html', 'htm'].includes(ext)) return 'html';
+  if (['obj', 'fbx', 'stl', 'blend', 'step', 'iges', 'glb', 'gltf'].includes(ext)) return '3d';
   return 'unknown';
 };
 
@@ -82,12 +86,51 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [htmlViewMode, setHtmlViewMode] = useState('preview');
 
+  const [showVersions, setShowVersions] = useState(false);
+  const [versions, setVersions] = useState([]);
+  const [selectedVersionId, setSelectedVersionId] = useState(null);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+
   const resolvedType = data?.type && data.type !== 'unknown' ? data.type : getFileType(data?.title);
+
+  const getVersionedUrl = (url) => {
+    if (!url) return '';
+    if (!selectedVersionId) return url;
+    try {
+      const urlObj = new URL(url, window.location.origin);
+      urlObj.searchParams.set('versionId', selectedVersionId);
+      return urlObj.toString();
+    } catch (e) {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}versionId=${encodeURIComponent(selectedVersionId)}`;
+    }
+  };
 
   const getStreamUrl = (url) => {
     if (!url) return '';
+    let updatedUrl = url;
+    if (selectedVersionId) {
+      try {
+        const urlObj = new URL(url, window.location.origin);
+        urlObj.searchParams.set('versionId', selectedVersionId);
+        updatedUrl = urlObj.toString();
+      } catch (e) {
+        const separator = url.includes('?') ? '&' : '?';
+        updatedUrl = `${url}${separator}versionId=${encodeURIComponent(selectedVersionId)}`;
+      }
+    }
     const token = localStorage.getItem('token');
-    return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+    if (token) {
+      try {
+        const urlObj = new URL(updatedUrl, window.location.origin);
+        urlObj.searchParams.set('token', token);
+        updatedUrl = urlObj.toString();
+      } catch (e) {
+        const separator = updatedUrl.includes('?') ? '&' : '?';
+        updatedUrl = `${updatedUrl}${separator}token=${encodeURIComponent(token)}`;
+      }
+    }
+    return updatedUrl;
   };
 
   const toggleFullscreen = () => {
@@ -746,6 +789,31 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  const fetchVersions = useCallback(async () => {
+    if (!data?.id) return;
+    setLoadingVersions(true);
+    try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const response = await fetch(`${config.API_BASE_URL || ''}/api/files/${data.id}/versions`, { headers });
+      if (!response.ok) throw new Error('Failed to fetch file versions');
+      const list = await response.json();
+      setVersions(list);
+    } catch (err) {
+      console.error(err);
+      notifyOperation?.('Failed to load version history', 'error');
+    } finally {
+      setLoadingVersions(false);
+    }
+  }, [data?.id, notifyOperation]);
+
+  useEffect(() => {
+    setSelectedVersionId(null);
+    if (data?.id) {
+      fetchVersions();
+    }
+  }, [data?.id, fetchVersions]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       const resolvedType = data?.type && data.type !== 'unknown' ? data.type : getFileType(data?.title);
@@ -759,11 +827,11 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
       setSelectedCell(null);
 
       if (resolvedType === 'zip' && data.url) {
-        loadZipContents(data.url);
+        loadZipContents(getVersionedUrl(data.url));
       } else if ((resolvedType === 'word' || resolvedType === 'excel') && data.url) {
-        loadOfficeDoc(data.url, resolvedType);
+        loadOfficeDoc(getVersionedUrl(data.url), resolvedType);
       } else if ((resolvedType === 'text' || resolvedType === 'html') && data.url) {
-        loadTextContent(data.url);
+        loadTextContent(getVersionedUrl(data.url));
       } else {
         setZipContents([]);
         setZipError(null);
@@ -778,7 +846,50 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [data, loadZipContents, loadOfficeDoc, loadTextContent]);
+  }, [data, selectedVersionId, loadZipContents, loadOfficeDoc, loadTextContent]);
+
+  const handleRestoreVersion = async (version) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const response = await fetch(`${config.API_BASE_URL || ''}/api/files/${data.id}/versions/${version.id}/restore`, {
+        method: 'POST',
+        headers
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to restore version');
+      }
+      notifyOperation?.(`Restored to Version ${version.versionNumber}`, 'success');
+      fetchVersions();
+      setSelectedVersionId(null);
+      if (onFileUpdated) {
+        onFileUpdated();
+      }
+    } catch (err) {
+      notifyOperation?.(err.message, 'error');
+    }
+  };
+
+  const handleDeleteVersion = async (version) => {
+    if (!window.confirm(`Are you sure you want to delete Version ${version.versionNumber}?`)) return;
+    try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const response = await fetch(`${config.API_BASE_URL || ''}/api/files/${data.id}/versions/${version.id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to delete version');
+      }
+      notifyOperation?.(`Deleted Version ${version.versionNumber}`, 'success');
+      fetchVersions();
+    } catch (err) {
+      notifyOperation?.(err.message, 'error');
+    }
+  };
 
   const handleDownload = () => {
     if (!data || !data.id) return;
@@ -989,6 +1100,53 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
     }
 
     switch (resolvedType) {
+      case '3d':
+        if (data.status === 'Processing') {
+          return (
+            <div className="processing-3d-wrapper" style={{
+              height: '100%',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '40px',
+              textAlign: 'center'
+            }}>
+              <div className="spinning-loader-icon" style={{
+                width: '48px',
+                height: '48px',
+                border: '4px solid rgba(255, 255, 255, 0.1)',
+                borderTop: '4px solid var(--accent)',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                marginBottom: '20px'
+              }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)' }}>Generating 3D Preview</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '8px' }}>
+                We are optimizing and converting the mesh for interactive web viewing.
+              </p>
+            </div>
+          );
+        }
+        return (
+          <div className="model-3d-wrapper" style={{ height: '100%', width: '100%', position: 'relative' }}>
+            <model-viewer
+              src={getStreamUrl(data.url)}
+              alt={data.title}
+              auto-rotate
+              camera-controls
+              ar
+              shadow-intensity="1"
+              style={{
+                width: '100%',
+                height: '100%',
+                background: 'transparent',
+                display: 'block'
+              }}
+            ></model-viewer>
+          </div>
+        );
       case 'image':
         return (
           <div className="image-preview-wrapper" style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -1387,9 +1545,16 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
               )}
 
               <button className="action-btn" onClick={handleDownload} title="Download"><Download size={18} /></button>
-              {resolvedType !== 'video' && resolvedType !== 'image' && resolvedType !== 'zip' && resolvedType !== 'html' && (
+              {resolvedType !== 'video' && resolvedType !== 'image' && resolvedType !== 'zip' && resolvedType !== 'html' && resolvedType !== '3d' && (
                 <button className="action-btn" onClick={handlePrint} title="Print"><Printer size={18} /></button>
               )}
+              <button 
+                className={`action-btn ${showVersions ? 'active-mode' : ''}`} 
+                onClick={() => setShowVersions(!showVersions)} 
+                title="Version History"
+              >
+                <History size={18} />
+              </button>
             </>
           )}
           <button className="action-btn" onClick={toggleFullscreen} title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
@@ -1397,8 +1562,75 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
           </button>
         </div>
       </div>
-      <div className="viewer-content">
-        {renderPreviewContent()}
+      <div className="viewer-main-layout">
+        <div className="viewer-content">
+          {renderPreviewContent()}
+        </div>
+
+        {showVersions && (
+          <div className="versions-sidebar">
+            <div className="sidebar-header">
+              <h3>Version History</h3>
+              <button className="sidebar-close-btn" onClick={() => setShowVersions(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="versions-list">
+              {loadingVersions ? (
+                <div className="sidebar-loading">Loading history...</div>
+              ) : versions.length > 0 ? (
+                versions.map((ver) => {
+                  const isLatestVersion = versions.length > 0 && versions[0].id === ver.id;
+                  const isActive = (selectedVersionId === ver.id) || (!selectedVersionId && isLatestVersion);
+                  const isCurrentActive = (data.currentVersionId === ver.id);
+                  
+                  return (
+                    <div key={ver.id} className={`version-card ${isActive ? 'active' : ''}`}>
+                      <div className="version-info">
+                        <div className="version-title-row">
+                          <span className="ver-badge">V{ver.versionNumber}</span>
+                          {isCurrentActive && <span className="current-badge">Active</span>}
+                        </div>
+                        <span className="ver-meta">By {ver.createdBy}</span>
+                        <span className="ver-meta">{new Date(ver.createdAt).toLocaleString()}</span>
+                        <span className="ver-meta">{formatBytes(ver.size)}</span>
+                      </div>
+                      <div className="version-actions">
+                        <button 
+                          className={`ver-action-btn view ${isActive ? 'active' : ''}`} 
+                          onClick={() => setSelectedVersionId(isActive ? null : ver.id)}
+                          title={isActive ? "Viewing this version" : "View this version"}
+                        >
+                          <Eye size={14} />
+                        </button>
+                        {!isCurrentActive && (
+                          <>
+                            <button 
+                              className="ver-action-btn restore" 
+                              onClick={() => handleRestoreVersion(ver)}
+                              title="Restore to active version"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                            <button 
+                              className="ver-action-btn delete" 
+                              onClick={() => handleDeleteVersion(ver)}
+                              title="Delete this version"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="sidebar-empty">No version history found.</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -1484,8 +1716,17 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
           border: 1px solid rgba(52, 152, 219, 0.2);
         }
 
+        .viewer-main-layout {
+          display: flex;
+          flex: 1;
+          height: calc(100% - 57px); /* subtract header height */
+          overflow: hidden;
+          position: relative;
+        }
+
         .viewer-content {
           flex: 1;
+          height: 100%;
           overflow: hidden;
           background: rgba(0,0,0,0.02);
           display: flex;
@@ -1493,6 +1734,147 @@ const FileViewer = ({ data, notifyOperation, onFileUpdated }) => {
         }
         body.dark-mode .viewer-content {
           background: rgba(255,255,255,0.02);
+        }
+
+        .versions-sidebar {
+          width: 280px;
+          border-left: 1px solid var(--glass-border);
+          background: var(--solid-bg);
+          backdrop-filter: blur(10px);
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          flex-shrink: 0;
+          z-index: 21;
+        }
+        .sidebar-header {
+          padding: 14px 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid var(--glass-border);
+        }
+        .sidebar-header h3 {
+          margin: 0;
+          font-size: 14px;
+          font-weight: 600;
+        }
+        .sidebar-close-btn {
+          background: transparent;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          padding: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          transition: background 0.2s;
+        }
+        .sidebar-close-btn:hover {
+          background: rgba(0,0,0,0.05);
+          color: var(--text-main);
+        }
+        body.dark-mode .sidebar-close-btn:hover {
+          background: rgba(255,255,255,0.1);
+        }
+        .versions-list {
+          flex: 1;
+          overflow-y: auto;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .version-card {
+          padding: 12px;
+          border-radius: 8px;
+          border: 1px solid var(--glass-border);
+          background: rgba(255,255,255,0.02);
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          transition: all 0.2s ease;
+        }
+        .version-card:hover {
+          border-color: var(--accent);
+          background: rgba(255,255,255,0.04);
+        }
+        .version-card.active {
+          border-color: var(--accent);
+          background: rgba(52, 152, 219, 0.05);
+          box-shadow: 0 0 10px rgba(52, 152, 219, 0.1);
+        }
+        .version-info {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          flex: 1;
+        }
+        .version-title-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .ver-badge {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--accent);
+          background: rgba(52, 152, 219, 0.1);
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+        .current-badge {
+          font-size: 10px;
+          font-weight: 500;
+          color: #2ecc71;
+          background: rgba(46, 204, 113, 0.1);
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+        .ver-meta {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+        .version-actions {
+          display: flex;
+          gap: 4px;
+        }
+        .ver-action-btn {
+          background: transparent;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          width: 24px;
+          height: 24px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+        .ver-action-btn:hover {
+          background: rgba(0,0,0,0.05);
+          color: var(--text-main);
+        }
+        body.dark-mode .ver-action-btn:hover {
+          background: rgba(255,255,255,0.1);
+        }
+        .ver-action-btn.view.active {
+          color: var(--accent);
+          background: rgba(52, 152, 219, 0.1);
+        }
+        .ver-action-btn.restore:hover {
+          color: #2ecc71;
+        }
+        .ver-action-btn.delete:hover {
+          color: #e74c3c;
+        }
+        .sidebar-loading, .sidebar-empty {
+          text-align: center;
+          padding: 20px;
+          color: var(--text-muted);
+          font-size: 13px;
         }
 
         .doc-viewer-wrapper {

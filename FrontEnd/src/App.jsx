@@ -734,6 +734,15 @@ function App() {
 
   const handleDocClick = (id) => {
     const isNewSelect = selectedDocId !== id;
+    if (selectedDocId && isNewSelect) {
+      const oldDocId = selectedDocId;
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      fetch(`${config.API_BASE_URL || ''}/api/files/${oldDocId}/preview`, {
+        method: 'DELETE',
+        headers
+      }).catch(err => console.error("Failed to clean up old preview file:", err));
+    }
     setSelectedDocId(isNewSelect ? id : null);
     setSelectedDocIds([id]);
     if (isNewSelect) {
@@ -741,10 +750,49 @@ function App() {
     }
   };
 
+  // Set up EventSource SSE for real-time 3D conversion updates
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const eventSource = new EventSource(`${config.API_BASE_URL || 'http://localhost:7002'}/api/notifications/stream?token=${token}`);
+
+    eventSource.onmessage = (event) => {
+      console.log("SSE Message:", event.data);
+      if (event.data && event.data.startsWith("READY:")) {
+        showToast("3D Model Conversion Complete!", "success");
+        // Force refresh the active folder file list so the spinner goes away and model viewer gets ready
+        if (selectedFolderId) {
+          handleFolderSelect(selectedFolderId);
+        }
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("SSE connection error, retrying...", err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [isAuthenticated, selectedFolderId]);
+
   const handleTogglePreview = () => {
     setIsResizing(true);
-    setIsPreviewVisible(!isPreviewVisible);
+    const nextVisible = !isPreviewVisible;
+    setIsPreviewVisible(nextVisible);
     setTimeout(() => setIsResizing(false), 450);
+
+    if (!nextVisible && activeDoc) {
+      const docId = activeDoc.id;
+      const token = localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      fetch(`${config.API_BASE_URL || ''}/api/files/${docId}/preview`, {
+        method: 'DELETE',
+        headers
+      }).catch(err => console.error("Failed to clean up temp preview on toggle close:", err));
+    }
   };
 
   const generateId = () => {
@@ -782,8 +830,22 @@ function App() {
     setUploads(prev => [...prev, ...newUploads]);
   };
 
-  const handleUploadComplete = (newFile, targetFolderId) => {
+  const handleUploadComplete = async (newFile, targetFolderId) => {
     notifyOperation("Upload Complete", `File "${newFile.title}" uploaded successfully.`, true);
+
+    if (isPreviewVisible && activeDoc) {
+      setIsPreviewVisible(false);
+      try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        await fetch(`${config.API_BASE_URL || ''}/api/files/${activeDoc.id}/preview`, {
+          method: 'DELETE',
+          headers
+        });
+      } catch (err) {
+        console.error("Failed to clean up temp preview:", err);
+      }
+    }
 
     if (targetFolderId === selectedFolderId) {
       const mappedFile = {

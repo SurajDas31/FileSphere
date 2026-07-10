@@ -2,11 +2,33 @@ package main
 
 import (
 	"log"
+	"net/http"
 
 	"filesphere-api/controllers"
 	"filesphere-api/database"
 	"filesphere-api/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	httpRequestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "path", "status"},
+	)
+	httpRequestDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "HTTP request latency in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "path"},
+	)
 )
 
 func main() {
@@ -15,6 +37,30 @@ func main() {
 
 	// Initialize Gin router
 	r := gin.Default()
+
+	// Prometheus middleware
+	r.Use(func(c *gin.Context) {
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		timer := prometheus.NewTimer(httpRequestDuration.WithLabelValues(c.Request.Method, path))
+		c.Next()
+		status := c.Writer.Status()
+		httpRequestsTotal.WithLabelValues(c.Request.Method, path, http.StatusText(status)).Inc()
+		timer.ObserveDuration()
+	})
+
+	// Health check endpoint
+	r.GET("/actuator/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "UP",
+			"service": "file-managed-service",
+		})
+	})
+
+	// Prometheus metrics endpoint
+	r.GET("/actuator/prometheus", gin.WrapH(promhttp.Handler()))
 
 	// CORS middleware (basic setup for dev)
 	r.Use(func(c *gin.Context) {
@@ -52,6 +98,10 @@ func main() {
 		api.PUT("/files/:id/content", controllers.UpdateFileContent)
 		api.POST("/files/:id/copy", controllers.CopyFile)
 		api.DELETE("/files/:id", controllers.DeleteFile)
+		api.GET("/notifications/stream", controllers.StreamNotifications)
+		api.GET("/files/:id/versions", controllers.GetFileVersions)
+		api.POST("/files/:id/versions/:ver_id/restore", controllers.RestoreFileVersion)
+		api.DELETE("/files/:id/versions/:ver_id", controllers.DeleteFileVersion)
 	}
 
 	log.Println("Server running on port 7001")
